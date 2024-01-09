@@ -1,0 +1,9 @@
+.vscode
+*.out
+*.dylib
+tmp*
+/build*
+test/*.ll
+.DS_Store
+*.pyc
+**/__pycache__
