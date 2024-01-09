@@ -7,4 +7,3 @@ test/*.ll
 .DS_Store
 *.pyc
 **/__pycache__
-*parsetab.py
