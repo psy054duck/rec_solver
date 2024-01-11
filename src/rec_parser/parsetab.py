@@ -6,9 +6,9 @@ _tabversion = '3.10'
 
 _lr_method = 'LALR'
 
-_lr_signature = 'AND ASSIGN DIV ELSE EQ GE GT ID IF LE LPAREN LT MINUS NE NEG NUMBER OR PLUS RPAREN SEMI TIMESrecurrence : initialization ifinitialization : assignmentsassignments : assignment assignmentsassignments : assignment : ID ASSIGN expression SEMIexpression : expression PLUS termexpression : expression MINUS termexpression : termterm : term TIMES factorterm : term DIV factorterm : factorfactor : NUMBERfactor : IDfactor : MINUS factorfactor : LPAREN expression RPARENif : '
+_lr_signature = 'AND ASSIGN COMMA DIV ELSE EQ GE GT ID IF LBRACE LE LPAREN LRECT LT MINUS NE NEG NUMBER OR PLUS RBRACE RPAREN RRECT SEMI TIMESrecurrence : initialization ifinitialization : assignmentsassignments : assignment assignmentsassignments : assignment : lhs ASSIGN expression SEMIexpression : expression PLUS termexpression : expression MINUS termexpression : termterm : term TIMES factorterm : term DIV factorterm : factorfactor : NUMBERfactor : IDfactor : MINUS factorfactor : LPAREN expression RPARENif : IF LPAREN condition RPAREN LBRACE assignments RBRACEif : IF LPAREN condition RPAREN LBRACE assignments RBRACE elseelse : ELSE LBRACE assignments RBRACEelse : ELSE ifcondition_atom : expression GT expressioncondition_atom : expression GE expressioncondition_atom : expression LT expressioncondition_atom : expression LE expressioncondition_atom : expression EQ expressioncondition_atom : expression NE expressioncondition_factor : condition_atomcondition_factor : NEG conditioncondition_factor : LPAREN condition RPARENcondition_term : condition_factor AND condition_termcondition_term : condition_factorcondition : condition_termcondition : condition_term OR conditionlhs : IDlhs : ID LRECT expression_list RRECTexpression_list : expressionexpression_list : expression COMMA expression_list'
     
-_lr_action_items = {'$end':([0,1,2,3,4,6,7,16,],[-4,0,-16,-2,-4,-1,-3,-5,]),'ID':([0,4,8,12,15,16,17,18,19,20,],[5,5,9,9,9,-5,9,9,9,9,]),'ASSIGN':([5,],[8,]),'NUMBER':([8,12,15,17,18,19,20,],[14,14,14,14,14,14,14,]),'MINUS':([8,9,10,11,12,13,14,15,17,18,19,20,21,22,23,24,25,26,27,],[12,-13,18,-8,12,-11,-12,12,12,12,12,12,-14,18,-6,-7,-9,-10,-15,]),'LPAREN':([8,12,15,17,18,19,20,],[15,15,15,15,15,15,15,]),'TIMES':([9,11,13,14,21,23,24,25,26,27,],[-13,19,-11,-12,-14,19,19,-9,-10,-15,]),'DIV':([9,11,13,14,21,23,24,25,26,27,],[-13,20,-11,-12,-14,20,20,-9,-10,-15,]),'SEMI':([9,10,11,13,14,21,23,24,25,26,27,],[-13,16,-8,-11,-12,-14,-6,-7,-9,-10,-15,]),'PLUS':([9,10,11,13,14,21,22,23,24,25,26,27,],[-13,17,-8,-11,-12,-14,17,-6,-7,-9,-10,-15,]),'RPAREN':([9,11,13,14,21,22,23,24,25,26,27,],[-13,-8,-11,-12,-14,27,-6,-7,-9,-10,-15,]),}
+_lr_action_items = {'IF':([0,2,3,4,9,29,69,],[-4,8,-2,-4,-3,-5,8,]),'ID':([0,4,10,11,12,15,19,22,27,29,30,31,32,33,37,41,42,44,45,46,47,48,49,57,70,],[6,6,18,18,18,18,18,18,18,-5,18,18,18,18,18,18,18,18,18,18,18,18,18,6,6,]),'$end':([1,7,67,68,71,73,],[0,-1,-16,-17,-19,-18,]),'RBRACE':([4,9,29,57,66,70,72,],[-4,-3,-5,-4,67,-4,73,]),'ASSIGN':([5,6,36,],[10,-33,-34,]),'LRECT':([6,],[11,]),'LPAREN':([8,10,11,12,15,19,22,27,30,31,32,33,37,41,42,44,45,46,47,48,49,],[12,19,19,22,19,19,22,22,19,19,19,19,19,22,22,19,19,19,19,19,19,]),'NUMBER':([10,11,12,15,19,22,27,30,31,32,33,37,41,42,44,45,46,47,48,49,],[17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,17,]),'MINUS':([10,11,12,13,14,15,16,17,18,19,21,22,27,28,30,31,32,33,34,35,37,39,41,42,44,45,46,47,48,49,50,51,52,53,54,60,61,62,63,64,65,],[15,15,15,31,-8,15,-11,-12,-13,15,31,15,15,31,15,15,15,15,-14,31,15,31,15,15,15,15,15,15,15,15,-6,-7,-9,-10,-15,31,31,31,31,31,31,]),'NEG':([12,22,27,41,42,],[27,27,27,27,27,]),'SEMI':([13,14,16,17,18,34,50,51,52,53,54,],[29,-8,-11,-12,-13,-14,-6,-7,-9,-10,-15,]),'PLUS':([13,14,16,17,18,21,28,34,35,39,50,51,52,53,54,60,61,62,63,64,65,],[30,-8,-11,-12,-13,30,30,-14,30,30,-6,-7,-9,-10,-15,30,30,30,30,30,30,]),'COMMA':([14,16,17,18,21,34,50,51,52,53,54,],[-8,-11,-12,-13,37,-14,-6,-7,-9,-10,-15,]),'RRECT':([14,16,17,18,20,21,34,50,51,52,53,54,55,],[-8,-11,-12,-13,36,-35,-14,-6,-7,-9,-10,-15,-36,]),'GT':([14,16,17,18,28,34,39,50,51,52,53,54,],[-8,-11,-12,-13,44,-14,44,-6,-7,-9,-10,-15,]),'GE':([14,16,17,18,28,34,39,50,51,52,53,54,],[-8,-11,-12,-13,45,-14,45,-6,-7,-9,-10,-15,]),'LT':([14,16,17,18,28,34,39,50,51,52,53,54,],[-8,-11,-12,-13,46,-14,46,-6,-7,-9,-10,-15,]),'LE':([14,16,17,18,28,34,39,50,51,52,53,54,],[-8,-11,-12,-13,47,-14,47,-6,-7,-9,-10,-15,]),'EQ':([14,16,17,18,28,34,39,50,51,52,53,54,],[-8,-11,-12,-13,48,-14,48,-6,-7,-9,-10,-15,]),'NE':([14,16,17,18,28,34,39,50,51,52,53,54,],[-8,-11,-12,-13,49,-14,49,-6,-7,-9,-10,-15,]),'RPAREN':([14,16,17,18,23,24,25,26,34,35,38,39,43,50,51,52,53,54,56,58,59,60,61,62,63,64,65,],[-8,-11,-12,-13,40,-31,-30,-26,-14,54,56,54,-27,-6,-7,-9,-10,-15,-28,-32,-29,-20,-21,-22,-23,-24,-25,]),'AND':([14,16,17,18,24,25,26,34,43,50,51,52,53,54,56,58,59,60,61,62,63,64,65,],[-8,-11,-12,-13,-31,42,-26,-14,-27,-6,-7,-9,-10,-15,-28,-32,-29,-20,-21,-22,-23,-24,-25,]),'OR':([14,16,17,18,24,25,26,34,43,50,51,52,53,54,56,58,59,60,61,62,63,64,65,],[-8,-11,-12,-13,41,-30,-26,-14,-27,-6,-7,-9,-10,-15,-28,-32,-29,-20,-21,-22,-23,-24,-25,]),'TIMES':([14,16,17,18,34,50,51,52,53,54,],[32,-11,-12,-13,-14,32,32,-9,-10,-15,]),'DIV':([14,16,17,18,34,50,51,52,53,54,],[33,-11,-12,-13,-14,33,33,-9,-10,-15,]),'LBRACE':([40,69,],[57,70,]),'ELSE':([67,],[69,]),}
 
 _lr_action = {}
 for _k, _v in _lr_action_items.items():
@@ -17,7 +17,7 @@ for _k, _v in _lr_action_items.items():
       _lr_action[_x][_k] = _y
 del _lr_action_items
 
-_lr_goto_items = {'recurrence':([0,],[1,]),'initialization':([0,],[2,]),'assignments':([0,4,],[3,7,]),'assignment':([0,4,],[4,4,]),'if':([2,],[6,]),'expression':([8,15,],[10,22,]),'term':([8,15,17,18,],[11,11,23,24,]),'factor':([8,12,15,17,18,19,20,],[13,21,13,13,13,25,26,]),}
+_lr_goto_items = {'recurrence':([0,],[1,]),'initialization':([0,],[2,]),'assignments':([0,4,57,70,],[3,9,66,72,]),'assignment':([0,4,57,70,],[4,4,4,4,]),'lhs':([0,4,57,70,],[5,5,5,5,]),'if':([2,69,],[7,71,]),'expression':([10,11,12,19,22,27,37,41,42,44,45,46,47,48,49,],[13,21,28,35,39,28,21,28,28,60,61,62,63,64,65,]),'term':([10,11,12,19,22,27,30,31,37,41,42,44,45,46,47,48,49,],[14,14,14,14,14,14,50,51,14,14,14,14,14,14,14,14,14,]),'factor':([10,11,12,15,19,22,27,30,31,32,33,37,41,42,44,45,46,47,48,49,],[16,16,16,34,16,16,16,16,16,52,53,16,16,16,16,16,16,16,16,16,]),'expression_list':([11,37,],[20,55,]),'condition':([12,22,27,41,],[23,38,43,58,]),'condition_term':([12,22,27,41,42,],[24,24,24,24,59,]),'condition_factor':([12,22,27,41,42,],[25,25,25,25,25,]),'condition_atom':([12,22,27,41,42,],[26,26,26,26,26,]),'else':([67,],[68,]),}
 
 _lr_goto = {}
 for _k, _v in _lr_goto_items.items():
@@ -27,20 +27,40 @@ for _k, _v in _lr_goto_items.items():
 del _lr_goto_items
 _lr_productions = [
   ("S' -> recurrence","S'",1,None,None,None),
-  ('recurrence -> initialization if','recurrence',2,'p_recurrence','parser.py',6),
-  ('initialization -> assignments','initialization',1,'p_initialization','parser.py',10),
-  ('assignments -> assignment assignments','assignments',2,'p_assignments_1','parser.py',14),
-  ('assignments -> <empty>','assignments',0,'p_assignments_2','parser.py',18),
-  ('assignment -> ID ASSIGN expression SEMI','assignment',4,'p_assignment','parser.py',22),
-  ('expression -> expression PLUS term','expression',3,'p_expression_plus','parser.py',26),
-  ('expression -> expression MINUS term','expression',3,'p_expression_minus','parser.py',30),
-  ('expression -> term','expression',1,'p_expression_term','parser.py',34),
-  ('term -> term TIMES factor','term',3,'p_term_times','parser.py',38),
-  ('term -> term DIV factor','term',3,'p_term_div','parser.py',42),
-  ('term -> factor','term',1,'p_term_factor','parser.py',46),
-  ('factor -> NUMBER','factor',1,'p_factor_num','parser.py',50),
-  ('factor -> ID','factor',1,'p_factor_id','parser.py',54),
-  ('factor -> MINUS factor','factor',2,'p_factor_negative','parser.py',58),
-  ('factor -> LPAREN expression RPAREN','factor',3,'p_factor_paren','parser.py',62),
-  ('if -> <empty>','if',0,'p_if','parser.py',67),
+  ('recurrence -> initialization if','recurrence',2,'p_recurrence','parser.py',7),
+  ('initialization -> assignments','initialization',1,'p_initialization','parser.py',11),
+  ('assignments -> assignment assignments','assignments',2,'p_assignments_1','parser.py',15),
+  ('assignments -> <empty>','assignments',0,'p_assignments_2','parser.py',19),
+  ('assignment -> lhs ASSIGN expression SEMI','assignment',4,'p_assignment','parser.py',23),
+  ('expression -> expression PLUS term','expression',3,'p_expression_plus','parser.py',27),
+  ('expression -> expression MINUS term','expression',3,'p_expression_minus','parser.py',31),
+  ('expression -> term','expression',1,'p_expression_term','parser.py',35),
+  ('term -> term TIMES factor','term',3,'p_term_times','parser.py',39),
+  ('term -> term DIV factor','term',3,'p_term_div','parser.py',43),
+  ('term -> factor','term',1,'p_term_factor','parser.py',47),
+  ('factor -> NUMBER','factor',1,'p_factor_num','parser.py',51),
+  ('factor -> ID','factor',1,'p_factor_id','parser.py',55),
+  ('factor -> MINUS factor','factor',2,'p_factor_negative','parser.py',59),
+  ('factor -> LPAREN expression RPAREN','factor',3,'p_factor_paren','parser.py',63),
+  ('if -> IF LPAREN condition RPAREN LBRACE assignments RBRACE','if',7,'p_if_1','parser.py',68),
+  ('if -> IF LPAREN condition RPAREN LBRACE assignments RBRACE else','if',8,'p_if_2','parser.py',74),
+  ('else -> ELSE LBRACE assignments RBRACE','else',4,'p_else_1','parser.py',80),
+  ('else -> ELSE if','else',2,'p_else_2','parser.py',84),
+  ('condition_atom -> expression GT expression','condition_atom',3,'p_condition_atom_GT','parser.py',88),
+  ('condition_atom -> expression GE expression','condition_atom',3,'p_condition_atom_GE','parser.py',92),
+  ('condition_atom -> expression LT expression','condition_atom',3,'p_condition_atom_LT','parser.py',96),
+  ('condition_atom -> expression LE expression','condition_atom',3,'p_condition_atom_LE','parser.py',100),
+  ('condition_atom -> expression EQ expression','condition_atom',3,'p_condition_atom_EQ','parser.py',104),
+  ('condition_atom -> expression NE expression','condition_atom',3,'p_condition_atom_NE','parser.py',108),
+  ('condition_factor -> condition_atom','condition_factor',1,'p_condition_factor_1','parser.py',112),
+  ('condition_factor -> NEG condition','condition_factor',2,'p_condition_factor_2','parser.py',116),
+  ('condition_factor -> LPAREN condition RPAREN','condition_factor',3,'p_condition_factor_3','parser.py',120),
+  ('condition_term -> condition_factor AND condition_term','condition_term',3,'p_condition_term_1','parser.py',124),
+  ('condition_term -> condition_factor','condition_term',1,'p_condition_term_2','parser.py',128),
+  ('condition -> condition_term','condition',1,'p_condition_1','parser.py',132),
+  ('condition -> condition_term OR condition','condition',3,'p_condition_2','parser.py',136),
+  ('lhs -> ID','lhs',1,'p_lhs_1','parser.py',140),
+  ('lhs -> ID LRECT expression_list RRECT','lhs',4,'p_lhs_2','parser.py',144),
+  ('expression_list -> expression','expression_list',1,'p_expression_list_1','parser.py',150),
+  ('expression_list -> expression COMMA expression_list','expression_list',3,'p_expression_list_2','parser.py',154),
 ]
