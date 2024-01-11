@@ -51,9 +51,16 @@ def p_factor_num(p):
     '''factor : NUMBER'''
     p[0] = sp.Integer(p[1])
 
+def p_factor_app(p):
+    '''factor : ID LPAREN expression_list RPAREN'''
+    args = p[3]
+    f = sp.Function(p[1], nargs=len(args))
+    p[0] = f(*args)
+
 def p_factor_id(p):
     '''factor : ID'''
     p[0] = sp.Symbol(p[1], integer=True)
+
 
 def p_factor_negative(p):
     '''factor : MINUS factor'''
@@ -78,7 +85,7 @@ def p_if_2(p):
 
 def p_else_1(p):
     '''else : ELSE LBRACE assignments RBRACE'''
-    p[0] = [(True, p[3])]
+    p[0] = [(sp.true, p[3])]
 
 def p_else_2(p):
     '''else : ELSE if'''
@@ -136,14 +143,10 @@ def p_condition_2(p):
     '''condition : condition_term OR condition'''
     p[0] = sp.Or(p[1], p[2])
 
-def p_lhs_1(p):
-    '''lhs : ID'''
-    p[0] = sp.Symbol(p[1], integer=True)
-
-def p_lhs_2(p):
-    '''lhs : ID LRECT expression_list RRECT'''
-    f = sp.Function(p[1])
+def p_lhs(p):
+    '''lhs : ID LPAREN expression_list RPAREN'''
     args = p[3]
+    f = sp.Function(p[1], nargs=len(args))
     p[0] = f(*args)
 
 def p_expression_list_1(p):
