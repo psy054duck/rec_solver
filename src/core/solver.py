@@ -13,5 +13,7 @@ def solve(rec: Recurrence):
     print(rec.is_standard())
 
 def solve_ultimate_periodic_linear_initial(rec: Recurrence):
-    terms = rec.get_terms()
+    assert(rec.is_standard())
 
+def solve_solvable_map(rec: Recurrence):
+    pass

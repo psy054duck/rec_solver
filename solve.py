@@ -14,6 +14,13 @@ def test_get_terms():
     e = f(a + 1) + f(a) + a + 1
     print(utils.get_terms(e))
 
+def test_get_exponential_factor():
+    n = sp.Symbol('n', integer=True)
+    e = 2**n * (3**(n+1) + n*n**2) + n + 1
+    e = sp.expand(sp.simplify(e))
+    print(utils.get_exponential_factors(e))
+
 if __name__ == '__main__':
     test()
     # test_get_terms()
+    # test_get_exponential_factor()

@@ -16,16 +16,33 @@ class Recurrence:
             raise Exception("More than one induction variable")
         self._ind_var = last_args.pop()
 
-    def get_ind_var(self):
+    def get_first_n_values(self, n):
+        assert(self.is_standard())
+
+    def is_solvable_map(self):
+        '''By solvable map, we mean all x(n) can be divided into x_1(n) v x_2(n) ... v x_m(n), such that x_i(n+1) = Kx_i(n) + p(x_1(n), ..., x_{i-1}(n)) + ep(n)'''
+        assert(self.is_standard())
+        if not self.conditions[0]: return False
+        ind_var = self.get_ind_var()
+        functions = self.get_all_func()
+        if any((func.nargs > 1 for func in functions)): return False
+        func_apps = [func(ind_var) for func in functions]
+
+
+    @property
+    def ind_var(self):
         return self._ind_var
 
-    def get_conditions(self):
+    @property
+    def conditions(self):
         return self._conditions.copy()
 
-    def get_transitions(self):
+    @property
+    def transitions(self):
         return self._transitions.copy()
 
-    def get_initial(self):
+    @property
+    def initial(self):
         return self._initial.copy()
 
     def get_app(self):
@@ -34,7 +51,7 @@ class Recurrence:
 
     def is_linear(self):
         app = self.get_app()
-        for trans in self.get_transitions():
+        for trans in self.transitions:
             if not all(utils.is_linear(expr, app) for expr in trans.values()):
                 return False
         return True
@@ -52,8 +69,8 @@ class Recurrence:
     def is_standard(self):
         '''Check whether this recurrence is in the standard form.
            By standard form, we mean in the transitions, left-hand sides are all of form f(..., n+1) and right-hand sides are all of form f(..., n).'''
-        ind_var = self.get_ind_var()
-        for trans in self.get_transitions():
+        ind_var = self.ind_var
+        for trans in self.transitions:
             for lhs, rhs in trans.items():
                 if lhs.is_number or not lhs.func.is_Function or not sp.Eq(lhs.args[-1] - ind_var - 1, 0):
                     return False
@@ -69,10 +86,10 @@ class Recurrence:
 
     def _get_app_from_transitions(self):
         app = set()
-        for trans in self.get_transitions():
+        for trans in self.transitions():
             trans_app = reduce(set.union, [utils.get_app(expr) for expr in trans.values()])
             app |= trans_app
         return app
 
     def _get_initial_func(self):
-        return {app.func for app in self.get_initial() if not app.is_Symbol}
+        return {app.func for app in self.initial if not app.is_Symbol}
