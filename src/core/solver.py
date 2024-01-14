@@ -16,4 +16,8 @@ def solve_ultimate_periodic_linear_initial(rec: Recurrence):
     assert(rec.is_standard())
 
 def solve_solvable_map(rec: Recurrence):
+    transition = rec.transitions[0]
+    return _solve_solvable_map(transition)
+
+def _solve_solvable_map(transition: dict):
     pass
