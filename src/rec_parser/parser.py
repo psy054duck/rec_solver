@@ -68,7 +68,7 @@ def p_factor_negative(p):
 
 def p_factor_paren(p):
     '''factor : LPAREN expression RPAREN'''
-    p[0] = p[1]
+    p[0] = p[2]
 
 
 def p_if_1(p):

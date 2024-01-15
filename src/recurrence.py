@@ -5,16 +5,21 @@ from functools import reduce
 class Recurrence:
     def __init__(self, initial, branches):
         self._preprocess(initial, branches)
+        self.cached_result = {}
 
     def _preprocess(self, initial, branches):
         self._conditions = [branch[0] for branch in branches]
         self._transitions = [branch[1] for branch in branches]
         self._initial = initial
         app = self.get_app()
-        last_args = {a.args[-1] for a in app}
+        last_args = {a.args[-1] for a in app if not a.is_Symbol}
         if len(last_args) != 1:
             raise Exception("More than one induction variable")
         self._ind_var = last_args.pop()
+        self._func_decls = self._get_all_func_decl()
+
+    def solve(self):
+        pass
 
     def get_first_n_values(self, n):
         assert(self.is_standard())
@@ -24,10 +29,13 @@ class Recurrence:
         assert(self.is_standard())
         if not self.conditions[0]: return False
         ind_var = self.get_ind_var()
-        functions = self.get_all_func()
+        functions = self._get_all_func()
         if any((func.nargs > 1 for func in functions)): return False
         func_apps = [func(ind_var) for func in functions]
 
+    @property
+    def func_decls(self):
+        return self._func_decls.copy()
 
     @property
     def ind_var(self):
@@ -59,7 +67,7 @@ class Recurrence:
     def is_linear_conditional(self):
         terms = self.get_terms()
 
-    def get_all_func_decl(self):
+    def _get_all_func_decl(self):
         app_condition = self._get_app_from_conditions()
         app_trans = self._get_app_from_transitions()
         functions_initial = self._get_initial_func()
