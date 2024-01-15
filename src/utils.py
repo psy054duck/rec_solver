@@ -30,3 +30,13 @@ def get_exponential_factors(expr, ind_var):
     if expr.is_Pow and expr.args[0].is_number and ind_var in expr.args[1].free_symbols:
         return {expr}
     return reduce(set.union, (get_exponential_factors(arg, ind_var) for arg in expr.args), set())
+
+def split_linear_others(expr, functions, ind_var):
+    '''For an expression of form Ax(n) + others, return (Ax(n), others)'''
+    expr = sp.expand(expr)
+    linear_part = sp.Integer(0)
+    for f in functions:
+        coeff = expr.coeff(f)
+        linear_part = linear_part + coeff*f
+    ep = sp.simplify(expr - linear_part)
+    return linear_part, ep

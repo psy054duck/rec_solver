@@ -59,7 +59,7 @@ class Recurrence:
     def is_linear_conditional(self):
         terms = self.get_terms()
 
-    def get_all_func(self):
+    def get_all_func_decl(self):
         app_condition = self._get_app_from_conditions()
         app_trans = self._get_app_from_transitions()
         functions_initial = self._get_initial_func()
@@ -81,12 +81,12 @@ class Recurrence:
         return True
 
     def _get_app_from_conditions(self):
-        app = reduce(set.union, [utils.get_app(cond) for cond in self.get_conditions()])
+        app = reduce(set.union, [utils.get_app(cond) for cond in self.conditions])
         return app
 
     def _get_app_from_transitions(self):
         app = set()
-        for trans in self.transitions():
+        for trans in self.transitions:
             trans_app = reduce(set.union, [utils.get_app(expr) for expr in trans.values()])
             app |= trans_app
         return app
