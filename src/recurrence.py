@@ -17,12 +17,29 @@ class Recurrence:
             raise Exception("More than one induction variable")
         self._ind_var = last_args.pop()
         self._func_decls = self._get_all_func_decl()
+        self._closed_forms = {}
+
+    def simplify_with_partial_solution(self, closed_forms):
+        self._conditions = [branch.subs(closed_forms) for branch in self._conditions]
+        self._transitions = [{k: v.subs(closed_forms) for k, v in trans.items()} for trans in self._transitions]
+        self._closed_forms |= closed_forms
 
     def solve(self):
         pass
 
     def get_first_n_values(self, n):
         assert(self.is_standard())
+        first_n_values = [self.initial]
+        conditions = self.conditions
+        transitions = self.transitions
+        for i in range(n):
+            cur_values = first_n_values[-1]
+            cur_transitions = [{k.subs(self.ind_var, i): trans[k].subs(self.ind_var, i) for k in trans} for trans in transitions]
+            for cond_index, cond in enumerate(conditions):
+                if cond.subs(cur_values).simplify() == sp.true:
+                    true_values = {k: v.subs(cur_values) for k, v in cur_transitions[cond_index].items()}
+                    first_n_values.append(true_values)
+        return first_n_values
 
     def is_solvable_map(self):
         '''By solvable map, we mean all x(n) can be divided into x_1(n) v x_2(n) ... v x_m(n), such that x_i(n+1) = Kx_i(n) + p(x_1(n), ..., x_{i-1}(n)) + ep(n)'''
@@ -32,6 +49,10 @@ class Recurrence:
         functions = self._get_all_func()
         if any((func.nargs > 1 for func in functions)): return False
         func_apps = [func(ind_var) for func in functions]
+
+    @property
+    def closed_forms(self):
+        return self._closed_forms.copy()
 
     @property
     def func_decls(self):

@@ -37,10 +37,10 @@ def get_exponential_base_and_multiplicity(expr, ind_var):
     for factor in factors:
         coeff = expr.coeff(factor)
         coeff_poly = coeff.as_poly([ind_var])
-        res[factor.args[0]] = coeff_poly.total_degree()
+        res[factor.args[0]] = coeff_poly.total_degree() + 1
         factors_part = factors_part + expr.coeff(factor)*factor
     rest = sp.simplify(expr - factors_part).as_poly([ind_var])
-    res[sp.Integer(1)] = rest.total_degree()
+    res[sp.Integer(1)] = rest.total_degree() + 1
     return res
 
 def _get_exponential_factors(expr, ind_var):
