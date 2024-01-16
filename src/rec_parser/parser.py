@@ -115,6 +115,14 @@ def p_condition_atom_NE(p):
     '''condition_atom : expression NE expression'''
     p[0] = sp.Ne(p[1], p[3])
 
+def p_condition_atom_TRUE(p):
+    '''condition_atom : TRUE'''
+    p[0] = sp.true
+
+def p_condition_atom_FALSE(p):
+    '''condition_atom : FALSE'''
+    p[0] = sp.false
+
 def p_condition_factor_1(p):
     '''condition_factor : condition_atom'''
     p[0] = p[1]

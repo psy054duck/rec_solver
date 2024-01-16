@@ -3,16 +3,8 @@ from .. import utils
 from ..recurrence import Recurrence
 from functools import reduce
 
-def solve(rec: Recurrence):
-    solve_solvable_map(rec)
-
-def solve_ultimate_periodic_linear_initial(rec: Recurrence):
-    assert(rec.is_standard())
-
 def solve_solvable_map(rec: Recurrence):
-    transition = rec.transitions[0]
     func_decls = rec.func_decls
-    functions = [func(rec.ind_var) for func in func_decls]
     components = get_layers_for_solvable_map(rec)
     for component in components:
         partial_closed_form = solve_solvable_map_for_component(rec, component)
@@ -40,7 +32,7 @@ def solve_solvable_map_for_component(rec: Recurrence, component):
         for cur_dict in [matrix_eigenvals] + base_multiplicity_other_part:
             bases_multi_dict[base] += cur_dict.get(base, 0)
     n = sum(bases_multi_dict.values())
-    first_n_values = rec.get_first_n_values(n)
+    first_n_values, _ = rec.get_first_n_values(n)
     eps = solve_for_exponential_polynomial(bases_multi_dict, func_decls, first_n_values, rec.ind_var)
     return eps
 
@@ -87,3 +79,22 @@ def build_adjacency_matrix(rec: Recurrence):
             if f_decl_j in utils.get_func_decls(other_expr):
                 digraph[i, j] = 1
     return digraph, functions
+
+def is_solvable_map(rec: Recurrence):
+    conditions = rec.conditions
+    if conditions[0].simplify() != sp.true: return False
+    ind_var = rec.ind_var
+    func_decls = rec.func_decls
+    if any((list(func.nargs)[0] > 1 for func in func_decls)): return False
+    layers = get_layers_for_solvable_map(rec)
+    transition = rec.transitions[0]
+    functions = [func_decl(ind_var) for func_decl in rec.func_decls]
+    for i, layer in enumerate(layers):
+        functions_later_layers = reduce(set.union, layers[i:], set())
+        for func in layer:
+            f_n_1 = func.func(ind_var + 1)
+            _, other_expr = utils.split_linear_others(transition[f_n_1], functions, ind_var)
+            apps = utils.get_app(other_expr) - {ind_var}
+            if any((app in functions_later_layers for app in apps)):
+                return False
+    return True

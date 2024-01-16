@@ -5,6 +5,7 @@ basic_tokens = ('NUMBER', 'ID', 'LPAREN', 'RPAREN', 'ASSIGN', 'SEMI', 'LBRACE', 
 arith_tokens = ('PLUS', 'MINUS', 'TIMES', 'DIV')
 cmp_tokens = ('GE', 'GT', 'LE', 'LT', 'EQ', 'NE')
 logical_tokens = ('AND', 'OR', 'NEG')
+literal_tokens = ('TRUE', 'FALSE')
 
 
 # Regular expression rules for simple tokens
@@ -28,6 +29,8 @@ t_NE      = r'!='
 t_AND     = r'&&'
 t_OR      = r'\|\|'
 t_NEG     = r'!'
+t_TRUE    = r'true'
+t_FALSE   = r'false'
 
 # A regular expression rule with some action code
 reserved = {
@@ -36,7 +39,7 @@ reserved = {
 }
 
 # tokens = ['LPAREN','RPAREN',...,'ID'] + list(reserved.values())
-tokens = basic_tokens + arith_tokens + cmp_tokens + logical_tokens + tuple(reserved.values())
+tokens = basic_tokens + arith_tokens + cmp_tokens + logical_tokens + tuple(reserved.values()) + literal_tokens
 
 def t_NUMBER(t):
     r'\d+'
@@ -44,7 +47,11 @@ def t_NUMBER(t):
 
 def t_ID(t):
     r'[a-zA-Z_][a-zA-Z_0-9]*'
-    t.type = reserved.get(t.value,'ID')    # Check for reserved words
+    t.type = reserved.get(t.value, 'ID')    # Check for reserved words
+    if t.value == 'true':
+        t.type = 'TRUE'
+    elif t.value == 'false':
+        t.type = 'FALSE'
     return t
 
 # Define a rule so we can track line numbers

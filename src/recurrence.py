@@ -24,14 +24,12 @@ class Recurrence:
         self._transitions = [{k: v.subs(closed_forms) for k, v in trans.items()} for trans in self._transitions]
         self._closed_forms |= closed_forms
 
-    def solve(self):
-        pass
-
     def get_first_n_values(self, n):
         assert(self.is_standard())
         first_n_values = [self.initial]
         conditions = self.conditions
         transitions = self.transitions
+        index_seq = []
         for i in range(n):
             cur_values = first_n_values[-1]
             cur_transitions = [{k.subs(self.ind_var, i): trans[k].subs(self.ind_var, i) for k in trans} for trans in transitions]
@@ -39,16 +37,11 @@ class Recurrence:
                 if cond.subs(cur_values).simplify() == sp.true:
                     true_values = {k: v.subs(cur_values) for k, v in cur_transitions[cond_index].items()}
                     first_n_values.append(true_values)
-        return first_n_values
+                    index_seq.append(cond_index)
+        return first_n_values, index_seq
 
-    def is_solvable_map(self):
-        '''By solvable map, we mean all x(n) can be divided into x_1(n) v x_2(n) ... v x_m(n), such that x_i(n+1) = Kx_i(n) + p(x_1(n), ..., x_{i-1}(n)) + ep(n)'''
-        assert(self.is_standard())
-        if not self.conditions[0]: return False
-        ind_var = self.get_ind_var()
-        functions = self._get_all_func()
-        if any((func.nargs > 1 for func in functions)): return False
-        func_apps = [func(ind_var) for func in functions]
+    def is_all_initialized(self):
+        return all((func_decl(0) in self.initial for func_decl in self.func_decls))
 
     @property
     def closed_forms(self):
