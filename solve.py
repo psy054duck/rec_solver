@@ -1,4 +1,4 @@
-from src.core.solvable_polynomial import solve
+from src.core.solvable_polynomial import solve_solvable_map
 from src.rec_parser import parser
 from src import utils
 import sympy as sp
@@ -28,7 +28,12 @@ def test_get_exponential_factor():
     e = sp.expand(sp.simplify(e))
     print(utils.get_exponential_factors(e))
 
+def test_compression():
+    seq = '1 1 1 1 1 1 1 1 1 0 1 0 1 0 1 0 1'.split()
+    print(utils.compress_seq(seq))
+
 if __name__ == '__main__':
-    test()
+    # test()
     # test_get_terms()
     # test_get_exponential_factor()
+    test_compression()

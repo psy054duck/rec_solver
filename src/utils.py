@@ -68,3 +68,31 @@ def sorted_strong_ly_connected_components(matrix):
     sorted_condensed = list(reversed(list(nx.topological_sort(condensed))))
     components = [condensed.nodes.data()[i]['members'] for i in sorted_condensed]
     return components
+
+def compress_seq(seq):
+    return _compress_seq(seq, [])
+
+def _compress_seq(seq, cur_compressed):
+    covered_seq = sum([pattern*cnt for pattern, cnt in cur_compressed], [])
+    remaining_seq = seq[len(covered_seq):]
+    if len(remaining_seq) == 0:
+        return cur_compressed
+    if len(remaining_seq) == 1:
+        return cur_compressed + [(seq, 1)]
+    best_ratio = 1
+    best_candidate = cur_compressed + [(seq, 1)]
+    for window in range(1, len(remaining_seq)//2):
+        pattern = remaining_seq[:window]
+        cnt = 1
+        while pattern*cnt == remaining_seq[:len(pattern)*cnt]:
+            cnt += 1
+        candidate_compressed = _compress_seq(seq, cur_compressed + [(pattern, cnt - 1)])
+        cur_ratio = compressed_ratio(seq, candidate_compressed)
+        if cur_ratio > best_ratio:
+            best_candidate = candidate_compressed
+            best_ratio = cur_ratio
+    return best_candidate
+
+
+def compressed_ratio(seq, compressed):
+    return len(seq) / sum((len(pattern) for pattern, _ in compressed))

@@ -67,6 +67,10 @@ class Recurrence:
     def initial(self):
         return self._initial.copy()
 
+    @staticmethod
+    def build_nonconditional_from_rec_by_index_seq(cls, rec, index_seq):
+        pass
+
     def get_app(self):
         terms = self._get_app_from_conditions() | self._get_app_from_transitions()
         return terms
