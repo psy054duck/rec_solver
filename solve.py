@@ -1,5 +1,7 @@
 from src.core.solvable_polynomial import solve_solvable_map
+from src.core.ultimately_periodic import solve_ultimately_periodic_initial
 from src.rec_parser import parser
+from src.recurrence import Recurrence
 from src import utils
 import sympy as sp
 
@@ -10,10 +12,11 @@ def test():
     # s1 = '''x(0) = 0; y(0) = 0; z(0) = 0; if (true) { x(n+1) = x(n) + n; y(n+1) = y(n) + x(n); z(n+1) = z(n) + x(n)*x(n); }'''
     # s2 = '''x(0) = 0; if (true) { x(n+1) = x(n)*x(n); }'''
     rec1 = parser.parse(s)
+    solve_ultimately_periodic_initial(rec1)
     # rec2 = parser.parse(s2)
-    res1 = solve(rec1)
+    # res1 = solve(rec1)
     # res2 = solve(rec2)
-    print(res1)
+    # print(res1)
     # print(res2)
 
 def test_get_terms():
@@ -33,7 +36,7 @@ def test_compression():
     print(utils.compress_seq(seq))
 
 if __name__ == '__main__':
-    # test()
+    test()
     # test_get_terms()
     # test_get_exponential_factor()
-    test_compression()
+    # test_compression()

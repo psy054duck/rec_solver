@@ -17,6 +17,8 @@ class Recurrence:
             raise Exception("More than one induction variable")
         self._ind_var = last_args.pop()
         self._func_decls = self._get_all_func_decl()
+        zero_indexed_func_apps = [func_decl(sp.Integer(0)) for func_decl in self.func_decls]
+        self._initial = {zero_app: initial.get(zero_app, zero_app) for zero_app in zero_indexed_func_apps}
         self._closed_forms = {}
 
     def simplify_with_partial_solution(self, closed_forms):
@@ -32,12 +34,15 @@ class Recurrence:
         index_seq = []
         for i in range(n):
             cur_values = first_n_values[-1]
-            cur_transitions = [{k.subs(self.ind_var, i): trans[k].subs(self.ind_var, i) for k in trans} for trans in transitions]
-            for cond_index, cond in enumerate(conditions):
+            # cur_transitions = [{k.subs(self.ind_var, i): trans[k].subs(self.ind_var, i) for k in trans} for trans in transitions]
+            cur_conditions = [cond.subs(self.ind_var, i) for cond in conditions]
+            for cond_index, cond in enumerate(cur_conditions):
                 if cond.subs(cur_values).simplify() == sp.true:
-                    true_values = {k: v.subs(cur_values) for k, v in cur_transitions[cond_index].items()}
+                    cur_transition = {k.subs(self.ind_var, i): v.subs(self.ind_var, i) for k, v in transitions[cond_index].items()}
+                    true_values = {k: v.subs(cur_values) for k, v in cur_transition.items()}
                     first_n_values.append(true_values)
                     index_seq.append(cond_index)
+                    break
         return first_n_values, index_seq
 
     def is_all_initialized(self):
@@ -67,9 +72,17 @@ class Recurrence:
     def initial(self):
         return self._initial.copy()
 
-    @staticmethod
-    def build_nonconditional_from_rec_by_index_seq(cls, rec, index_seq):
-        pass
+    @classmethod
+    def build_nonconditional_from_rec_by_seq(cls, rec, seq, initial):
+        transitions = rec.transitions
+        ind_var = rec.ind_var
+        func_decls = rec.func_decls
+        transition = {func_decl(ind_var + 1): func_decl(ind_var) for func_decl in func_decls}
+        for i in seq:
+            cur_transition = transitions[i]
+            new_cur_transition = {func_app.func(ind_var): trans for func_app, trans in cur_transition.items()}
+            transition = {func_app: trans.subs(new_cur_transition, simultaneous=True) for func_app, trans in transition.items()}
+        return cls(initial, [(sp.true, transition)])
 
     def get_app(self):
         terms = self._get_app_from_conditions() | self._get_app_from_transitions()
