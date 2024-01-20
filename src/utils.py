@@ -70,28 +70,36 @@ def sorted_strong_ly_connected_components(matrix):
     return components
 
 def compress_seq(seq):
-    return _compress_seq(seq, [])
+    return _compress_seq(seq, [], None)
 
-def _compress_seq(seq, cur_compressed):
+def _compress_seq(seq, cur_compressed, best_compressed):
     covered_seq = sum([pattern*cnt for pattern, cnt in cur_compressed], [])
     remaining_seq = seq[len(covered_seq):]
+    if best_compressed is not None:
+        cur_compressed_ratio = compressed_ratio(seq, cur_compressed)
+        best_compressed_ratio = compressed_ratio(seq, best_compressed)
+        if best_compressed_ratio >= cur_compressed_ratio:
+            return best_compressed
     if len(remaining_seq) == 0:
         return cur_compressed
     if len(remaining_seq) == 1:
         return cur_compressed + [(seq, 1)]
-    best_ratio = 1
-    best_candidate = cur_compressed + [(seq, 1)]
-    for window in range(1, len(remaining_seq)//2):
+    if best_compressed is None:
+        cur_best_compressed = (cur_compressed + [(seq, 1)])
+    else:
+        cur_best_compressed = best_compressed
+    best_ratio = compressed_ratio(seq, cur_best_compressed)
+    for window in range(1, len(remaining_seq)//2 + 1):
         pattern = remaining_seq[:window]
         cnt = 1
         while pattern*cnt == remaining_seq[:len(pattern)*cnt]:
             cnt += 1
-        candidate_compressed = _compress_seq(seq, cur_compressed + [(pattern, cnt - 1)])
+        candidate_compressed = _compress_seq(seq, cur_compressed + [(pattern, cnt - 1)], cur_best_compressed)
         cur_ratio = compressed_ratio(seq, candidate_compressed)
         if cur_ratio > best_ratio:
-            best_candidate = candidate_compressed
+            cur_best_compressed = candidate_compressed
             best_ratio = cur_ratio
-    return best_candidate
+    return cur_best_compressed
 
 
 def compressed_ratio(seq, compressed):

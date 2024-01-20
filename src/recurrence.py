@@ -26,7 +26,11 @@ class Recurrence:
         self._transitions = [{k: v.subs(closed_forms) for k, v in trans.items()} for trans in self._transitions]
         self._closed_forms |= closed_forms
 
-    def get_first_n_values(self, n):
+    def get_n_values_starts_with(self, start, n):
+        first_values, index_seq = self._get_first_n_values(start + n)
+        return first_values[start:], index_seq[start:]
+
+    def _get_first_n_values(self, n):
         assert(self.is_standard())
         first_n_values = [self.initial]
         conditions = self.conditions
