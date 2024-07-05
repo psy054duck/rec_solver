@@ -31,8 +31,6 @@ def solve_ultimately_periodic_initial(rec: Recurrence, bnd=100):
         # print(nonconditional)
         for initial, closed, threshold in zip(initials, nonconditional, pattern_cnt):
             mapping = {func(0): initial[func(threshold)] for func in rec.func_decls}
-            print(closed.subs(mapping))
-        print('*'*10)
         ith += 1
 
 def _solve_as_nonconditional(rec: Recurrence, seq):
@@ -45,7 +43,7 @@ def _solve_as_nonconditional(rec: Recurrence, seq):
         for i in range(period):
             shift_closed = {v: c.subs({rec.ind_var: (rec.ind_var - i)/period}, simultaneous=True) for v, c in raw_closed_form.items()}
             for j in seq[:i]:
-                shift_closed = rec.run_one_iteration_for_ith_transition(shift_closed, seq[j])
+                shift_closed = rec.run_one_iteration_for_ith_transition(shift_closed, j)
             closed_form.append(shift_closed)
         res = PeriodicClosedForm(closed_form, rec.ind_var)
     else:

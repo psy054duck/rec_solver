@@ -55,6 +55,7 @@ class Recurrence:
     def run_one_iteration_for_ith_transition(self, cur_value, ith):
         transition = self.transitions[ith]
         val = {v: transition[v].subs(cur_value, simultaneous=True) for v in transition}
+        val = {k.func(self.ind_var): val[k] for k in val}
         return val
 
 
