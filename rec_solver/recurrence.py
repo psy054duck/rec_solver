@@ -27,10 +27,10 @@ class Recurrence:
         self._closed_forms |= closed_forms
 
     def get_n_values_starts_with(self, start, n):
-        first_values, index_seq = self._get_first_n_values(start + n)
+        first_values, index_seq = self.get_first_n_values(start + n)
         return first_values[start:], index_seq[start:]
 
-    def _get_first_n_values(self, n):
+    def get_first_n_values(self, n):
         assert(self.is_standard())
         first_n_values = [self.initial]
         conditions = self.conditions
@@ -51,6 +51,12 @@ class Recurrence:
 
     def is_all_initialized(self):
         return all((func_decl(0) in self.initial for func_decl in self.func_decls))
+
+    def run_one_iteration_for_ith_transition(self, cur_value, ith):
+        transition = self.transitions[ith]
+        val = {v: transition[v].subs(cur_value, simultaneous=True) for v in transition}
+        return val
+
 
     @property
     def closed_forms(self):

@@ -1,12 +1,12 @@
-from src.core.solvable_polynomial import solve_solvable_map
-from src.core.ultimately_periodic import solve_ultimately_periodic_initial
-from src.rec_parser import parser
-from src.recurrence import Recurrence
-from src import utils
+from rec_solver.core.solvable_polynomial import solve_solvable_map
+from rec_solver.core.ultimately_periodic import solve_ultimately_periodic_initial
+from rec_solver.rec_parser import parser
+from rec_solver.recurrence import Recurrence
+from rec_solver import utils
 import sympy as sp
 
 def test():
-    s = '''a(0) = 0; b(0) = 1; if ((a(n) < 100)) { a(n+1) = a(n) + 1; b(n+1) = b(n) - 1; } else {a(n+1) = a(n) - 1; b(n+1) = b(n) - 1; }'''
+    s = '''a(0) = 0; b(0) = 1; if ((a(n) < 2)) { a(n+1) = a(n) + 1; b(n+1) = b(n) - 1; } else {a(n+1) = a(n) - 1; b(n+1) = b(n) - 1; }'''
     # s = '''a(0) = 0; b(0) = 1; if (1 == 1) { a(n+1) = a(n) + b(n)*b(n); b(n+1) = b(n) + a(n)*b(n); }'''
     # s = '''x(0) = 0; y(0) = 0; z(0) = 0; if (1 == 1) { x(n+1) = x(n) + z(n)*z(n) + 1; y(n+1) = y(n) - z(n)*z(n); z(n+1) = z(n) + (x(n) + y(n))*(x(n) + y(n)); }'''
     # s1 = '''x(0) = 0; y(0) = 0; z(0) = 0; if (true) { x(n+1) = x(n) + n; y(n+1) = y(n) + x(n); z(n+1) = z(n) + x(n)*x(n); }'''
