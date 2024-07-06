@@ -10,9 +10,12 @@ class PeriodicClosedForm(ClosedForm):
         self._ind_var = ind_var
 
     def eval_at(self, n):
-        assert(n >= 0)
-        r = n % self.period
-        val = {k: c.subs(self.ind_var, n) for k, c in self._closed_form_list[r]}
+        if self.period == 1:
+            r = 0
+        else:
+            assert(n >= 0)
+            r = n % self.period
+        val = {k.subs({self.ind_var: n}, simultaneous=True): c.subs({self.ind_var: n}, simultaneous=True) for k, c in self._closed_form_list[r].items()}
         return val
 
     def subs(self, mapping):
@@ -51,7 +54,6 @@ class PiecewiseClosedForm(ClosedForm):
         new_closed_forms = self.closed_forms + latter_closed.closed_forms
         return PiecewiseClosedForm(new_thresholds, new_closed_forms, self.ind_var)
 
-
     def eval_at(self, n):
         assert(n >= 0)
         is_larger = [n > t for t in self.thresholds]
@@ -79,7 +81,6 @@ class PiecewiseClosedForm(ClosedForm):
             res += '{0:{width}}: '.format(interval, width=max_prefix_len)
             res += str(closed) + '\n'
         return res
-
 
     def _compute_intervals(self, thresholds):
         res = []

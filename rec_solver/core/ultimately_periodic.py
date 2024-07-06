@@ -5,35 +5,56 @@ from ..closed_form import PeriodicClosedForm, PiecewiseClosedForm
 from functools import reduce
 from .solvable_polynomial import solve_solvable_map, is_solvable_map
 import logging
+import z3
 
 logger = logging.getLogger(__name__)
 
 class UnsolvableError(Exception):
     pass
 
+def solve_ultimately_periodic_symbolic(rec: Recurrence, bnd=100, precondition=True):
+    z3_solver = z3.Solver()
+    acc_condition = precondition
+    while z3_solver.check(acc_condition) != z3.unsat:
+        model = z3_solver.model()
+        parameters = rec.get_symbolic_values_from_initial()
+        cur_val = {p: model.eval(utils.to_z3(p), model_completion=True).as_long() for p in parameters}
+        initialized_rec = rec.subs(cur_val)
+        _, index_seq = _solve_ultimately_periodic_initial(initialized_rec)
+        # qs = [z3.Int('q%d' % i) for i in range(len(index_seq) - 1)]
+        qs = sp.symbols('q:%d' % (len(index_seq) - 1))
+        index_seq_temp = [(s[0], q) for s, q in zip(index_seq, qs)] + [index_seq[-1]]
+        can_sol = _compute_solution_by_index_seq(rec, index_seq_temp)
+        print(can_sol)
+        break
+
 def solve_ultimately_periodic_initial(rec: Recurrence, bnd=100):
+    closed_form, _ = _solve_ultimately_periodic_initial(rec, bnd)
+    return closed_form
+
+def _solve_ultimately_periodic_initial(rec: Recurrence, bnd=100):
     assert(rec.is_all_initialized())
     n = 1
     start = 0
     ith = 1
     closed_form = PiecewiseClosedForm()
+    acc_index_seq = []
     while n < bnd:
         n *= 2
-        print(start)
         candidate, guessed_index_seq = _compute_candidate_solution(rec, start, n, ith)
+        acc_index_seq.extend(guessed_index_seq)
         smallest = verify(rec, candidate, guessed_index_seq)
-        shift_candidate = candidate.subs({rec.ind_var: rec.ind_var - start})
+        shift_candidate = candidate.subs({candidate.ind_var: candidate.ind_var - start})
         closed_form = closed_form.concatenate(shift_candidate)
         if smallest is not sp.oo: # means hypothesis is wrong
             start = smallest
         else:
             break
         ith += 1
-    return closed_form
+    return closed_form, acc_index_seq
 
 def verify(rec: Recurrence, candidate_sol: PiecewiseClosedForm, pattern: list):
     conditions = rec.conditions
-    transitions = rec.transitions
     start = sum([cnt for _, cnt in pattern[:-1]])
     last_closed_form = candidate_sol.closed_forms[-1]
     assert(isinstance(last_closed_form, PeriodicClosedForm))
@@ -45,51 +66,52 @@ def verify(rec: Recurrence, candidate_sol: PiecewiseClosedForm, pattern: list):
     smallest = sp.oo
     for r, i in enumerate(periodic_index_seq):
         cond = conditions[i]
-        cond = cond.subs(last_closed_form.get_rth_part_closed_form(r%period), simultaneous=True)
-        cond = cond.subs({candidate_sol.ind_var: period*k + r%period}, simultaneous=True)
+        cond = cond.subs(last_closed_form.get_rth_part_closed_form(r), simultaneous=True)
+        cond = cond.subs({candidate_sol.ind_var: period*k + r}, simultaneous=True)
         cond_range = cond.as_set()
-        k_range = n_range.subs({n: period*k + r%period}, simultaneous=True).as_set()
+        k_range = n_range.subs({n: period*k + r}, simultaneous=True).as_set()
         if not k_range.is_subset(cond_range):
             cur_smallest = _smallest_violation(k_range, cond_range, period, r, rec.ind_var)
-            cur_smallest = cur_smallest*period + r%period
-            # cur_smallest = (cur_smallest - (r + 1)%period)/period
+            cur_smallest = cur_smallest*period + r
             smallest = min(smallest, cur_smallest)
     return smallest
 
 def _smallest_violation(n_range: sp.Interval, cond_range: sp.Interval, period, r, ind_var):
-    # comp_cond_range = cond_range.complement(sp.Reals)
-    # intersect = n_range.intersect(comp_cond_range)
-    # rel = intersect.as_relational(ind_var).subs({ind_var: (ind_var - (r + 1)%period)/period}, simultaneous=True)
-    # rel_set = rel.as_set()
-    # left = sp.ceiling(rel_set.inf)
     intersect = n_range.intersect(cond_range)
     comp = intersect.complement(n_range)
-    # rel = comp.as_relational(ind_var).subs({ind_var: (ind_var - r%period)/period}, simultaneous=True)
-    # rel_set = rel.as_set()
-    # print(rel_set)
     left = sp.ceiling(comp.inf)
     if not comp.contains(left):
         left += 1
     return left
 
+def _compute_solution_by_index_seq(rec: Recurrence, index_seq):
+    patterns = [seq for seq, _ in index_seq]
+    thresholds = [0] + [cnt for _, cnt in index_seq[:-1]]
+    nonconditional = [_solve_as_nonconditional(rec, pattern) for pattern in patterns]
+    shift_closed = [closed.subs({closed.ind_var: closed.ind_var - shift}) for closed, shift in zip(nonconditional, thresholds)]
+    initials = [rec.initial] + [closed.eval_at(t) for closed, t in zip(shift_closed, thresholds[1:])]
+    closed_forms = []
+    for initial, closed, t in zip(initials, shift_closed, thresholds):
+        mapping = {func(0): initial[func(t)] for func in rec.func_decls}
+        closed_forms.append(closed.subs(mapping).subs(rec.initial))
+    return PiecewiseClosedForm(thresholds, closed_forms, rec.ind_var)
+
 def _compute_candidate_solution(rec: Recurrence, start, n, ith):
     values, index_seq = rec.get_n_values_starts_with(start, n)
     compressed_seq = utils.compress_seq(index_seq)
     guessed_patterns = [seq for seq, _ in compressed_seq]
-    thresholds = [0] + [cnt for _, cnt in compressed_seq[:-1]]
-    nonconditional = [_solve_as_nonconditional(rec, pattern) for pattern in guessed_patterns]
-    initials = [values[i] for i in thresholds]
-    debug_prefix = "%dth guess: " % ith
+    debug_prefix = "%dth guess starts with %dth value: " % (ith, start)
     padding = " "*len(debug_prefix)
     logger.debug(debug_prefix + "values are %s" % values)
     logger.debug(padding + "prefix of index sequence is %s" % index_seq)
     logger.debug(padding + "the guessed patterns are %s" % guessed_patterns)
-    # print(nonconditional)
-    closed_forms = []
-    for initial, closed, threshold in zip(initials, nonconditional, thresholds):
-        mapping = {func(0): initial[func(start + threshold)] for func in rec.func_decls} | {rec.ind_var: rec.ind_var - threshold}
-        closed_forms.append(closed.subs(mapping))
-    return PiecewiseClosedForm(thresholds, closed_forms, rec.ind_var), compressed_seq
+    first_value = values[0]
+    initial = {func.func(0): first_value[func] for func in first_value}
+    new_rec = rec.copy_rec_with_diff_initial(initial)
+    sol = _compute_solution_by_index_seq(new_rec, compressed_seq)
+    # shift_sol = sol.subs({sol.ind_var: sol.ind_var - start})
+    logger.debug(padding + "the guessed closed-form solution is %s" % sol)
+    return sol, compressed_seq
 
 def _solve_as_nonconditional(rec: Recurrence, seq):
     new_rec = Recurrence.build_nonconditional_from_rec_by_seq(rec, seq, {})

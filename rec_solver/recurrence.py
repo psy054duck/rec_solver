@@ -27,6 +27,17 @@ class Recurrence:
         self._transitions = [{k: v.subs(closed_forms) for k, v in trans.items()} for trans in self._transitions]
         self._closed_forms |= closed_forms
 
+    def subs(self, mapping):
+        initial = {k: self.initial[k].subs(mapping, simultaneous=True) for k in self.initial}
+        conditions = [c.subs(mapping, simultaneous=True) for c in self.conditions]
+        transitions = [{k: trans[k].subs(mapping, simultaneous=True) for k in trans} for trans in self.transitions]
+        branches = list(zip(conditions, transitions))
+        return Recurrence(initial, branches)
+
+    def copy_rec_with_diff_initial(self, new_initial):
+        branches = list(zip(self.conditions, self.transitions))
+        return Recurrence(new_initial, branches)
+
     @staticmethod
     def make_exclusive_conditions(conditions):
         acc_neg = sp.true
@@ -114,6 +125,10 @@ class Recurrence:
             if not all(utils.is_linear(expr, app) for expr in trans.values()):
                 return False
         return True
+
+    def get_symbolic_values_from_initial(self):
+        initial = self.initial
+        return reduce(set.union, [v.free_symbols for v in initial.values()], set())
 
     def is_linear_conditional(self):
         terms = self.get_terms()
