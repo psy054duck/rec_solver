@@ -25,6 +25,9 @@ class PeriodicClosedForm(ClosedForm):
     def __str__(self):
         return str(self._closed_form_list)
 
+    def get_rth_part_closed_form(self, r):
+        return self._closed_form_list[r]
+
     @property
     def period(self):
         return len(self._closed_form_list)
@@ -34,7 +37,7 @@ class PeriodicClosedForm(ClosedForm):
         return self._ind_var
 
 class PiecewiseClosedForm(ClosedForm):
-    def __init__(self, thresholds, closed_forms, ind_var):
+    def __init__(self, thresholds=[], closed_forms=[], ind_var=sp.Symbol('n', integer=True)):
         if sp.oo in thresholds:
             std_thresholds = thresholds
         else:
@@ -42,6 +45,12 @@ class PiecewiseClosedForm(ClosedForm):
         self._closed_forms = closed_forms
         self._ind_var = ind_var
         self._intervals = self._compute_intervals(std_thresholds)
+
+    def concatenate(self, latter_closed):
+        new_thresholds = self.thresholds + latter_closed.thresholds
+        new_closed_forms = self.closed_forms + latter_closed.closed_forms
+        return PiecewiseClosedForm(new_thresholds, new_closed_forms, self.ind_var)
+
 
     def eval_at(self, n):
         assert(n >= 0)
@@ -91,3 +100,7 @@ class PiecewiseClosedForm(ClosedForm):
     @property
     def intervals(self):
         return self._intervals
+
+    @property
+    def thresholds(self):
+        return [interval.left for interval in self.intervals]

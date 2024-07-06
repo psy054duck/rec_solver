@@ -54,7 +54,10 @@ def gen_exponential_polynomials_template(bases_multi_dict, ind_var):
     unknowns = []
     for base, multi in bases_multi_dict.items():
         poly_template, coeffs = gen_polynomial_template_for_degree(ind_var, multi-1, str(base))
-        template += poly_template*base**ind_var
+        if base == 0:
+            template += poly_template*sp.Piecewise((1, sp.Eq(ind_var, 0)), (0, True))
+        else:
+            template += poly_template*base**ind_var
         unknowns.extend(coeffs)
     return template, unknowns
 

@@ -58,7 +58,6 @@ class Recurrence:
         val = {k.func(self.ind_var): val[k] for k in val}
         return val
 
-
     @property
     def closed_forms(self):
         return self._closed_forms.copy()
@@ -114,7 +113,9 @@ class Recurrence:
         app_trans = self._get_app_from_transitions()
         functions_initial = self._get_initial_func()
         functions_cond_trans = {app.func for app in app_condition | app_trans if not app.is_Symbol}
-        return functions_initial | functions_cond_trans
+        transitions_keys = reduce(set.union, [set(trans.keys()) for trans in self.transitions])
+        func_decls_from_keys = {k.func for k in transitions_keys}
+        return functions_initial | functions_cond_trans | func_decls_from_keys
 
     def is_standard(self):
         '''Check whether this recurrence is in the standard form.
@@ -138,7 +139,7 @@ class Recurrence:
         app = set()
         for trans in self.transitions:
             trans_app = reduce(set.union, [utils.get_app(expr) for expr in trans.values()])
-            app |= trans_app
+            app = app | trans_app 
         return app
 
     def _get_initial_func(self):

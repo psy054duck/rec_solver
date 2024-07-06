@@ -2,7 +2,7 @@ import ply.lex as lex
 
 # List of token names.   This is always required
 basic_tokens = ('NUMBER', 'ID', 'LPAREN', 'RPAREN', 'ASSIGN', 'SEMI', 'LBRACE', 'RBRACE', 'COMMA')
-arith_tokens = ('PLUS', 'MINUS', 'TIMES', 'DIV')
+arith_tokens = ('PLUS', 'MINUS', 'TIMES', 'DIV', 'MOD')
 cmp_tokens = ('GE', 'GT', 'LE', 'LT', 'EQ', 'NE')
 logical_tokens = ('AND', 'OR', 'NEG')
 literal_tokens = ('TRUE', 'FALSE')
@@ -13,6 +13,7 @@ t_PLUS    = r'\+'
 t_MINUS   = r'-'
 t_TIMES   = r'\*'
 t_DIV     = r'/'
+t_MOD     = r'%'
 t_LPAREN  = r'\('
 t_RPAREN  = r'\)'
 t_LBRACE  = r'\{'

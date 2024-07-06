@@ -43,6 +43,10 @@ def p_term_div(p):
     '''term : term DIV factor'''
     p[0] = p[1] / p[3]
 
+def p_term_mod(p):
+    '''term : term MOD factor'''
+    p[0] = p[1] % p[3]
+
 def p_term_factor(p):
     '''term : factor'''
     p[0] = p[1]
@@ -69,7 +73,6 @@ def p_factor_negative(p):
 def p_factor_paren(p):
     '''factor : LPAREN expression RPAREN'''
     p[0] = p[2]
-
 
 def p_if_1(p):
     '''if : IF LPAREN condition RPAREN LBRACE assignments RBRACE'''
