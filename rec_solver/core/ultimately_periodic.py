@@ -19,17 +19,17 @@ def solve_ultimately_periodic_initial(rec: Recurrence, bnd=100):
     closed_form = PiecewiseClosedForm()
     while n < bnd:
         n *= 2
+        print(start)
         candidate, guessed_index_seq = _compute_candidate_solution(rec, start, n, ith)
-        print(candidate)
         smallest = verify(rec, candidate, guessed_index_seq)
         shift_candidate = candidate.subs({rec.ind_var: rec.ind_var - start})
         closed_form = closed_form.concatenate(shift_candidate)
-        if smallest >= 0: # means hypothesis is wrong
+        if smallest is not sp.oo: # means hypothesis is wrong
             start = smallest
         else:
             break
         ith += 1
-    print(closed_form)
+    return closed_form
 
 def verify(rec: Recurrence, candidate_sol: PiecewiseClosedForm, pattern: list):
     conditions = rec.conditions
@@ -42,26 +42,35 @@ def verify(rec: Recurrence, candidate_sol: PiecewiseClosedForm, pattern: list):
     n = sp.Symbol('n', integer=True)
     k = sp.Symbol('k', integer=True)
     n_range = n >= start
+    smallest = sp.oo
     for r, i in enumerate(periodic_index_seq):
         cond = conditions[i]
-        cond = cond.subs(last_closed_form.get_rth_part_closed_form(r), simultaneous=True)
-        cond = cond.subs({candidate_sol.ind_var: period*k + r})
+        cond = cond.subs(last_closed_form.get_rth_part_closed_form(r%period), simultaneous=True)
+        cond = cond.subs({candidate_sol.ind_var: period*k + r%period}, simultaneous=True)
         cond_range = cond.as_set()
-        k_range = n_range.subs({n: period*k + r}).as_set()
+        k_range = n_range.subs({n: period*k + r%period}, simultaneous=True).as_set()
         if not k_range.is_subset(cond_range):
-            smallest = _smallest_violation(k_range, cond_range)
-            smallest = (smallest - r)/period
-            return smallest
-    return -1
+            cur_smallest = _smallest_violation(k_range, cond_range, period, r, rec.ind_var)
+            cur_smallest = cur_smallest*period + r%period
+            # cur_smallest = (cur_smallest - (r + 1)%period)/period
+            smallest = min(smallest, cur_smallest)
+    return smallest
 
-def _smallest_violation(n_range: sp.Interval, cond_range: sp.Interval):
-    comp_cond_range = cond_range.complement(sp.Reals)
-    intersect = n_range.intersect(comp_cond_range)
-    left = intersect.inf
-    if not intersect.contains(left):
+def _smallest_violation(n_range: sp.Interval, cond_range: sp.Interval, period, r, ind_var):
+    # comp_cond_range = cond_range.complement(sp.Reals)
+    # intersect = n_range.intersect(comp_cond_range)
+    # rel = intersect.as_relational(ind_var).subs({ind_var: (ind_var - (r + 1)%period)/period}, simultaneous=True)
+    # rel_set = rel.as_set()
+    # left = sp.ceiling(rel_set.inf)
+    intersect = n_range.intersect(cond_range)
+    comp = intersect.complement(n_range)
+    # rel = comp.as_relational(ind_var).subs({ind_var: (ind_var - r%period)/period}, simultaneous=True)
+    # rel_set = rel.as_set()
+    # print(rel_set)
+    left = sp.ceiling(comp.inf)
+    if not comp.contains(left):
         left += 1
     return left
-
 
 def _compute_candidate_solution(rec: Recurrence, start, n, ith):
     values, index_seq = rec.get_n_values_starts_with(start, n)

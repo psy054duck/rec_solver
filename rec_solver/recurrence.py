@@ -8,7 +8,8 @@ class Recurrence:
         self.cached_result = {}
 
     def _preprocess(self, initial, branches):
-        self._conditions = [branch[0] for branch in branches]
+        conditions = [branch[0] for branch in branches]
+        self._conditions = Recurrence.make_exclusive_conditions(conditions)
         self._transitions = [branch[1] for branch in branches]
         self._initial = initial
         app = self.get_app()
@@ -25,6 +26,15 @@ class Recurrence:
         self._conditions = [branch.subs(closed_forms) for branch in self._conditions]
         self._transitions = [{k: v.subs(closed_forms) for k, v in trans.items()} for trans in self._transitions]
         self._closed_forms |= closed_forms
+
+    @staticmethod
+    def make_exclusive_conditions(conditions):
+        acc_neg = sp.true
+        exclusive_conditions = []
+        for cond in conditions:
+            exclusive_conditions.append(sp.simplify(sp.And(acc_neg, cond)))
+            acc_neg = sp.And(acc_neg, sp.Not(cond))
+        return exclusive_conditions
 
     def get_n_values_starts_with(self, start, n):
         first_values, index_seq = self.get_first_n_values(start + n)

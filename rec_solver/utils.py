@@ -2,6 +2,7 @@ import sympy as sp
 from functools import reduce
 import networkx as nx
 import numpy as np
+from sympy.core.function import UndefinedFunction
 
 def is_linear(expr, terms):
     '''Check whether "expr" is linear in terms of "terms"'''
@@ -22,7 +23,7 @@ def get_app(expr):
         args = set()
     if expr.is_number:
         return set()
-    if (expr.func.is_Function and not any(arg.is_number for arg in args)) or expr.is_Symbol:
+    if (isinstance(expr.func, UndefinedFunction) and not any(arg.is_number for arg in args)) or expr.is_Symbol:
         return {expr}
     return reduce(set.union, [get_app(arg) for arg in args], set())
 
