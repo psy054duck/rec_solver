@@ -18,6 +18,7 @@ def test():
     # closed = solve_ultimately_periodic_initial(rec1)
     closed = solve_ultimately_periodic_symbolic(rec1)
     print(closed)
+    print(closed.to_z3())
     # rec2 = parser.parse(s2)
     # res1 = solve(rec1)
     # res2 = solve(rec2)

@@ -2,11 +2,7 @@ import z3
 import sympy as sp
 from . import utils
 
-class ClosedForm:
-    def __init__(self):
-        pass
-
-class PeriodicClosedForm(ClosedForm):
+class PeriodicClosedForm:
     def __init__(self, closed_form_list, ind_var):
         self._closed_form_list = closed_form_list
         self._ind_var = ind_var
@@ -42,7 +38,7 @@ class PeriodicClosedForm(ClosedForm):
             expr_z3 = closed_form_z3_list[-1][var_z3]
             for i, closed in enumerate(closed_form_z3_list[:-1]):
                 expr_z3 = z3.If(ind_var_z3 % self.period == i, closed[var_z3], expr_z3)
-            res[var_z3] = expr_z3
+            res[var_z3] = z3.simplify(expr_z3)
         return res
 
     def _to_z3(self, closed):
@@ -69,7 +65,7 @@ class PeriodicClosedForm(ClosedForm):
         except:
             return set()
 
-class PiecewiseClosedForm(ClosedForm):
+class PiecewiseClosedForm:
     def __init__(self, thresholds=[], closed_forms=[], ind_var=sp.Symbol('n', integer=True)):
         if sp.oo in thresholds:
             std_thresholds = thresholds
@@ -103,6 +99,11 @@ class PiecewiseClosedForm(ClosedForm):
             new_intervals.append(rel.as_set())
         return new_intervals
 
+    def simple_subs(self, mapping):
+        thresholds = [interval.left.subs(mapping, simultaneous=True) for interval in self.intervals]
+        closed_forms = [c.subs(mapping) for c in self.closed_forms]
+        return PiecewiseClosedForm(thresholds, closed_forms, self.ind_var)
+
     def to_z3(self):
         ind_var_z3 = utils.to_z3(self.ind_var)
         closed_forms_z3 = [closed.to_z3() for closed in self.closed_forms]
@@ -111,10 +112,10 @@ class PiecewiseClosedForm(ClosedForm):
             var_z3 = utils.to_z3(var)
             expr_z3 = closed_forms_z3[0][var_z3]
             for i, interval in enumerate(self.intervals[:-1]):
-                cond = utils.interval_to_z3(interval, ind_var_z3)
+                cond = utils.interval_to_z3(interval, self.ind_var)
                 closed = closed_forms_z3[i][var_z3]
                 expr_z3 = z3.If(cond, closed, expr_z3)
-            res[var_z3] = expr_z3
+            res[var_z3] = z3.simplify(expr_z3)
         return res
 
     def __str__(self):
@@ -154,5 +155,34 @@ class PiecewiseClosedForm(ClosedForm):
     def all_vars(self):
         try:
             return self.closed_forms[0].all_vars
+        except:
+            return set()
+
+class SymbolicClosedForm:
+    def __init__(self, constraints, closed_forms):
+        self._constraints = constraints
+        self._closed_forms = closed_forms
+
+    def __str__(self):
+        res = ''
+        for constraint, closed in zip(self._constraints, self._closed_forms):
+            res += str(constraint) + ':\n'
+            res += '\t' + str(closed)
+        return res
+
+    def to_z3(self):
+        res = {}
+        for var in self.all_vars:
+            var_z3 = utils.to_z3(var)
+            expr = self._closed_forms[-1].to_z3()[var_z3]
+            for constraint, closed in zip(self._constraints[:-1], self._closed_forms[:-1]):
+                expr = z3.If(constraint, closed.to_z3()[var_z3], expr)
+            res[var_z3] = z3.simplify(expr)
+        return res
+
+    @property
+    def all_vars(self):
+        try:
+            return self._closed_forms[0].all_vars
         except:
             return set()

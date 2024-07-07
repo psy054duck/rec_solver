@@ -6,7 +6,7 @@ from functools import reduce
 
 from .. import utils
 from ..recurrence import Recurrence
-from ..closed_form import PeriodicClosedForm, PiecewiseClosedForm
+from ..closed_form import PeriodicClosedForm, PiecewiseClosedForm, SymbolicClosedForm
 from .solvable_polynomial import solve_solvable_map, is_solvable_map
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,8 @@ def solve_ultimately_periodic_symbolic(rec: Recurrence, bnd=100, precondition=z3
     acc_condition = z3.BoolVal(True)
     i = 0
     logger.debug("Solving recurrence %s" % rec)
+    constraints = []
+    closed_forms = []
     while z3_solver.check(acc_condition) != z3.unsat:
         i += 1
         model = z3_solver.model()
@@ -42,6 +44,10 @@ def solve_ultimately_periodic_symbolic(rec: Recurrence, bnd=100, precondition=z3
         constraint_no_kq = z3.simplify(z3.And(*qe.apply(z3.ForAll(k, z3.Implies(k >= 0, constraint_no_q)))[0]))
         logger.debug('In the %dth iteration: the parameters satisfy\n%s' % (i, constraint_no_kq))
         acc_condition = z3.And(acc_condition, z3.Not(constraint_no_kq))
+        constraints.append(constraint_no_kq)
+        mapping = {q: sp.sympify(str(linear)) for q, linear in zip(qs, q_linear)}
+        closed_forms.append(can_sol.simple_subs(mapping))
+    return SymbolicClosedForm(constraints, closed_forms)
 
 def solve_ultimately_periodic_initial(rec: Recurrence, bnd=100):
     closed_form, _ = _solve_ultimately_periodic_initial(rec, bnd)
