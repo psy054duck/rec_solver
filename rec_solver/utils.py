@@ -4,6 +4,7 @@ import networkx as nx
 import numpy as np
 from sympy.core.function import UndefinedFunction
 import z3
+# import cvc5.pythonic as z3
 
 def is_linear(expr, terms):
     '''Check whether "expr" is linear in terms of "terms"'''
@@ -192,3 +193,46 @@ def to_z3(sp_expr):
     else:
         raise Exception('Conversion for "%s" has not been implemented yet: %s' % (type(self), self))
     return z3.simplify(res)
+
+def interval_to_z3(interval, ind_var):
+    ind_var_z3 = to_z3(ind_var)
+    left = to_z3(interval.left)
+    right = None if interval.right is sp.oo else to_z3(interval.right)
+    cond = left <= ind_var_z3 if right is None else z3.And(left <= ind_var_z3, ind_var_z3 < right)
+    return cond
+
+def compute_q(constraint, q, vars, ind_var):
+    '''q is constrained by constraint. Express q as linear combination of other variables in constraint. If it is not linear raise error'''
+    variables = [to_z3(v) for v in vars]
+    q_z3 = to_z3(q)
+    cs = [z3.Int('__c%d' % i) for i in range(len(variables) + 1)]
+    template = sum([c*v for c, v in zip(cs, variables)]) + cs[-1]
+
+    eq_solver = z3.Solver()
+    constraint_solver = z3.Solver()
+    # constraint_solver.add(q_z3 >= 1)
+    points = []
+    full_constraint = z3.ForAll(ind_var, z3.Implies(ind_var >= 0, constraint))
+    constraint_solver.push()
+    for _ in range(len(cs)):
+        constraint_solver.check(full_constraint)
+        m = constraint_solver.model()
+        point = [m.eval(var, True) for var in variables]
+        eq_solver.add(m.eval(q_z3, True) == z3.substitute(template, *list(zip(variables, point))))
+        points.append(point)
+        ls = [z3.Real('__l%d' % i) for i in range(len(points))]
+        if point == [0]*len(point):
+            constraint_solver.add(z3.Or(*[var != 0 for var in variables]))
+        else:
+            vec_space = []
+            for i, var in enumerate(variables):
+                vec_space.append(var == sum(p[i]*ls[j] for j, p in enumerate(points)))
+            constraint_solver.add(z3.Not(z3.Exists(ls, z3.And(*vec_space))))
+    constraint_solver.pop()
+    eq_solver.check()
+    m = eq_solver.model()
+    linear_expr = z3.substitute(template, *[(c, m.eval(c, True)) for c in cs])
+    res = constraint_solver.check(q_z3 != linear_expr, full_constraint)
+    if res == z3.sat:
+        return None
+    return linear_expr

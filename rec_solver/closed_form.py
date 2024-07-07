@@ -1,4 +1,6 @@
+import z3
 import sympy as sp
+from . import utils
 
 class ClosedForm:
     def __init__(self):
@@ -31,6 +33,26 @@ class PeriodicClosedForm(ClosedForm):
     def get_rth_part_closed_form(self, r):
         return self._closed_form_list[r]
 
+    def to_z3(self):
+        ind_var_z3 = utils.to_z3(self.ind_var)
+        closed_form_z3_list = [self._to_z3(closed) for closed in self._closed_form_list]
+        res = {}
+        for var in self.all_vars:
+            var_z3 = utils.to_z3(var)
+            expr_z3 = closed_form_z3_list[-1][var_z3]
+            for i, closed in enumerate(closed_form_z3_list[:-1]):
+                expr_z3 = z3.If(ind_var_z3 % self.period == i, closed[var_z3], expr_z3)
+            res[var_z3] = expr_z3
+        return res
+
+    def _to_z3(self, closed):
+        res = {}
+        for k, c in closed.items():
+            k_z3 = utils.to_z3(k)
+            c_z3 = utils.to_z3(c)
+            res[k_z3] = c_z3
+        return res
+
     @property
     def period(self):
         return len(self._closed_form_list)
@@ -38,6 +60,14 @@ class PeriodicClosedForm(ClosedForm):
     @property
     def ind_var(self):
         return self._ind_var
+
+    @property
+    def all_vars(self):
+        try:
+            closed = self._closed_form_list[0]
+            return set(closed.keys())
+        except:
+            return set()
 
 class PiecewiseClosedForm(ClosedForm):
     def __init__(self, thresholds=[], closed_forms=[], ind_var=sp.Symbol('n', integer=True)):
@@ -73,6 +103,20 @@ class PiecewiseClosedForm(ClosedForm):
             new_intervals.append(rel.as_set())
         return new_intervals
 
+    def to_z3(self):
+        ind_var_z3 = utils.to_z3(self.ind_var)
+        closed_forms_z3 = [closed.to_z3() for closed in self.closed_forms]
+        res = {}
+        for var in self.all_vars:
+            var_z3 = utils.to_z3(var)
+            expr_z3 = closed_forms_z3[0][var_z3]
+            for i, interval in enumerate(self.intervals[:-1]):
+                cond = utils.interval_to_z3(interval, ind_var_z3)
+                closed = closed_forms_z3[i][var_z3]
+                expr_z3 = z3.If(cond, closed, expr_z3)
+            res[var_z3] = expr_z3
+        return res
+
     def __str__(self):
         res = ''
         str_intervals = [str(interval.as_relational(self.ind_var)) for interval in self.intervals]
@@ -105,3 +149,10 @@ class PiecewiseClosedForm(ClosedForm):
     @property
     def thresholds(self):
         return [interval.left for interval in self.intervals]
+
+    @property
+    def all_vars(self):
+        try:
+            return self.closed_forms[0].all_vars
+        except:
+            return set()

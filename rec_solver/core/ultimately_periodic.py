@@ -1,21 +1,27 @@
 import sympy as sp
+import logging
+# import cvc5.pythonic as z3
+import z3
+from functools import reduce
+
 from .. import utils
 from ..recurrence import Recurrence
 from ..closed_form import PeriodicClosedForm, PiecewiseClosedForm
-from functools import reduce
 from .solvable_polynomial import solve_solvable_map, is_solvable_map
-import logging
-import z3
 
 logger = logging.getLogger(__name__)
 
 class UnsolvableError(Exception):
     pass
 
-def solve_ultimately_periodic_symbolic(rec: Recurrence, bnd=100, precondition=True):
+def solve_ultimately_periodic_symbolic(rec: Recurrence, bnd=100, precondition=z3.BoolVal(True)):
     z3_solver = z3.Solver()
-    acc_condition = precondition
+    z3_solver.add(precondition)
+    acc_condition = z3.BoolVal(True)
+    i = 0
+    logger.debug("Solving recurrence %s" % rec)
     while z3_solver.check(acc_condition) != z3.unsat:
+        i += 1
         model = z3_solver.model()
         parameters = rec.get_symbolic_values_from_initial()
         cur_val = {p: model.eval(utils.to_z3(p), model_completion=True).as_long() for p in parameters}
@@ -25,8 +31,17 @@ def solve_ultimately_periodic_symbolic(rec: Recurrence, bnd=100, precondition=Tr
         qs = sp.symbols('q:%d' % (len(index_seq) - 1))
         index_seq_temp = [(s[0], q) for s, q in zip(index_seq, qs)] + [index_seq[-1]]
         can_sol = _compute_solution_by_index_seq(rec, index_seq_temp)
-        print(can_sol)
-        break
+        constraint, k = _set_up_constraints(rec, can_sol, index_seq_temp)
+        constraint = z3.And(constraint, *[utils.to_z3(q) >= 1 for q in qs])
+        logger.debug('In the %dth iteration: the set up index sequence template is %s' % (i, index_seq_temp))
+        logger.debug('In the %dth iteration: the closed-form solution is\n%s' % (i, can_sol))
+        logger.debug('In the %dth iteration: the set up constraint is\n%s' % (i, constraint))
+        q_linear = [utils.compute_q(constraint, q, parameters, k) for q in qs]
+        constraint_no_q = z3.substitute(constraint, *[(utils.to_z3(q), linear) for q, linear in zip(qs, q_linear)])
+        qe = z3.Tactic('qe')
+        constraint_no_kq = z3.simplify(z3.And(*qe.apply(z3.ForAll(k, z3.Implies(k >= 0, constraint_no_q)))[0]))
+        logger.debug('In the %dth iteration: the parameters satisfy\n%s' % (i, constraint_no_kq))
+        acc_condition = z3.And(acc_condition, z3.Not(constraint_no_kq))
 
 def solve_ultimately_periodic_initial(rec: Recurrence, bnd=100):
     closed_form, _ = _solve_ultimately_periodic_initial(rec, bnd)
@@ -130,5 +145,21 @@ def _solve_as_nonconditional(rec: Recurrence, seq):
         raise UnsolvableError("Recurrence of this kind is not solvable.")
     return res
 
-def _apply_initial_values(closed_form, initial):
-    return {k: v.subs(initial, simultaneous=True) for k, v in closed_form.items()}
+def _set_up_constraints(rec: Recurrence, closed_form: PiecewiseClosedForm, index_seq):
+    rec_conditions = [utils.to_z3(cond) for cond in rec.conditions]
+    intervals = closed_form.intervals
+    k = z3.Int('k')
+    constraint = True
+    ind_var = utils.to_z3(closed_form.ind_var)
+    for i, (seq, q) in enumerate(index_seq):
+        premise = utils.interval_to_z3(intervals[i], closed_form.ind_var)
+        closed_form_component = closed_form.closed_forms[i]
+        period = closed_form_component.period
+        for r, j in enumerate(seq):
+            closed_form_z3 = closed_form_component.to_z3()
+            mapping = [(k, v) for k, v in closed_form_z3.items()]
+            condition = z3.substitute(rec_conditions[j], *mapping)
+            cur_constraint = z3.Implies(premise, condition)
+            cur_constraint = z3.substitute(cur_constraint, (ind_var, period*k + r))
+            constraint = z3.And(constraint, cur_constraint)
+    return constraint, k
