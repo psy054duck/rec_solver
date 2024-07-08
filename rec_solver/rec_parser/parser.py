@@ -175,3 +175,10 @@ def p_error(p):
 
 # Build the parser
 parser = yacc.yacc()
+
+def parse_str(s):
+    return parser.parse(s)
+
+def parse_file(filename):
+    with open(filename) as fp:
+        return parser.parse(fp.read())

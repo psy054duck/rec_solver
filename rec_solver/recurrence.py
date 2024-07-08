@@ -17,10 +17,20 @@ class Recurrence:
         if len(last_args) != 1:
             raise Exception("More than one induction variable")
         self._ind_var = last_args.pop()
+        self._transitions = self._padding_transitions(self._transitions, self.all_funcs)
         self._func_decls = self._get_all_func_decl()
         zero_indexed_func_apps = [func_decl(sp.Integer(0)) for func_decl in self.func_decls]
         self._initial = {zero_app: initial.get(zero_app, zero_app) for zero_app in zero_indexed_func_apps}
         self._closed_forms = {}
+
+    def _padding_transitions(self, transitions, all_funcs):
+        new_transitions = []
+        all_funcs_next = [func.subs({self.ind_var: self.ind_var + 1}) for func in all_funcs]
+        for trans in transitions:
+            need_padding = set(all_funcs_next) - set(trans.keys())
+            identity_trans = {k: k.subs({self.ind_var: self.ind_var - 1}) for k in need_padding}
+            new_transitions.append(trans | identity_trans)
+        return new_transitions
 
     def simplify_with_partial_solution(self, closed_forms):
         self._conditions = [branch.subs(closed_forms) for branch in self._conditions]
@@ -86,6 +96,11 @@ class Recurrence:
     @property
     def func_decls(self):
         return self._func_decls.copy()
+
+    @property
+    def all_funcs(self):
+        funcs = reduce(set.union, [set(trans.keys()) for trans in self.transitions])
+        return [func.subs({self.ind_var: self.ind_var - 1}) for func in funcs]
 
     @property
     def ind_var(self):
