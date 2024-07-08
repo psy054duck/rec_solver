@@ -186,3 +186,17 @@ class SymbolicClosedForm:
             return self._closed_forms[0].all_vars
         except:
             return set()
+
+class ExprClosedForm:
+    def __init__(self, closed_forms):
+        self._closed_forms = closed_forms
+
+    def __str__(self):
+        res = ''
+        for expr, c in self._closed_forms.items():
+            res += '%s: %s\n' % (expr, c)
+        return res
+
+    def to_z3(self):
+        res = {utils.to_z3(expr): utils.to_z3(c) for expr, c in self._closed_forms.items()}
+        return res
