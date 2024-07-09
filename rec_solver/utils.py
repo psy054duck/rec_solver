@@ -236,3 +236,8 @@ def compute_q(constraint, q, vars, ind_var):
     if res == z3.sat:
         return None
     return linear_expr
+
+def is_same_transition(trans1, trans2):
+    if set(trans1.keys()) != set(trans2.keys()):
+        return False
+    return all([sp.simplify(sp.Eq(trans1[k], trans2[k])) for k in trans1])

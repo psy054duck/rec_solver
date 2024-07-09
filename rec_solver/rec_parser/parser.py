@@ -166,7 +166,7 @@ def p_expression_list_1(p):
 
 def p_expression_list_2(p):
     '''expression_list : expression COMMA expression_list'''
-    p[0] = [p[1]] + p[2]
+    p[0] = [p[1]] + p[3]
 
 
 def p_error(p):

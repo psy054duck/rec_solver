@@ -66,43 +66,32 @@ class PeriodicClosedForm:
             return set()
 
 class PiecewiseClosedForm:
-    def __init__(self, thresholds=[], closed_forms=[], ind_var=sp.Symbol('n', integer=True)):
-        if sp.oo in thresholds:
-            std_thresholds = thresholds
-        else:
-            std_thresholds = thresholds + [sp.oo]
+    def __init__(self, conditions=[], closed_forms=[], ind_var=sp.Symbol('n', integer=True)):
+        self._conditions = conditions
         self._closed_forms = closed_forms
         self._ind_var = ind_var
-        self._intervals = self._compute_intervals(std_thresholds)
 
     def concatenate(self, latter_closed):
-        new_thresholds = self.thresholds + latter_closed.thresholds
+        conditions = self.conditions + latter_closed.conditions
         new_closed_forms = self.closed_forms + latter_closed.closed_forms
-        return PiecewiseClosedForm(new_thresholds, new_closed_forms, self.ind_var)
+        return PiecewiseClosedForm(conditions, new_closed_forms, self.ind_var)
 
     def eval_at(self, n):
         assert(n >= 0)
-        is_larger = [n > t for t in self.thresholds]
-        which = is_larger.index(False) - 1
+        fired = [c.subs({self.ind_var: n}) for c in self.conditions]
+        assert(any(fired))
+        which = fired.index(True) - 1
         return self.closed_forms[which].subs({self.ind_var: n})
 
     def subs(self, mapping):
-        intervals = self._intervals_after_mapping_n(mapping)
-        thresholds = [interval.left for interval in intervals]
+        conditions = [c.subs(mapping, simultaneous=True) for c in self.conditions]
         closed_forms = [c.subs(mapping) for c in self.closed_forms]
-        return PiecewiseClosedForm(thresholds, closed_forms, self.ind_var)
-
-    def _intervals_after_mapping_n(self, mapping):
-        new_intervals = []
-        for interval in self.intervals:
-            rel = interval.as_relational(self.ind_var).subs(mapping, simultaneous=True)
-            new_intervals.append(rel.as_set())
-        return new_intervals
+        return PiecewiseClosedForm(conditions, closed_forms, self.ind_var)
 
     def simple_subs(self, mapping):
-        thresholds = [interval.left.subs(mapping, simultaneous=True) for interval in self.intervals]
+        conditions = [c.subs(mapping, simultaneous=True) for c in self.conditions]
         closed_forms = [c.subs(mapping) for c in self.closed_forms]
-        return PiecewiseClosedForm(thresholds, closed_forms, self.ind_var)
+        return PiecewiseClosedForm(conditions, closed_forms, self.ind_var)
 
     def to_z3(self):
         ind_var_z3 = utils.to_z3(self.ind_var)
@@ -120,10 +109,9 @@ class PiecewiseClosedForm:
 
     def __str__(self):
         res = ''
-        str_intervals = [str(interval.as_relational(self.ind_var)) for interval in self.intervals]
-        max_prefix_len = max([len(s) for s in str_intervals])
-        for interval, closed in zip(str_intervals, self.closed_forms):
-            res += '{0:{width}}: '.format(interval, width=max_prefix_len)
+        max_prefix_len = max([len(str(cond)) for cond in self.conditions])
+        for cond, closed in zip(self.conditions, self.closed_forms):
+            res += '{0:{width}}: '.format(str(cond), width=max_prefix_len)
             res += str(closed) + '\n'
         return res
 
@@ -144,12 +132,8 @@ class PiecewiseClosedForm:
         return self._ind_var
 
     @property
-    def intervals(self):
-        return self._intervals
-
-    @property
-    def thresholds(self):
-        return [interval.left for interval in self.intervals]
+    def conditions(self):
+        return self._conditions
 
     @property
     def all_vars(self):
@@ -170,6 +154,11 @@ class SymbolicClosedForm:
             res += '\t' + str(closed)
         return res
 
+    def subs(self, mapping):
+        constraints = [z3.substitute(c, *[(utils.to_z3(k), utils.to_z3(v)) for k, v in mapping.items()]) for c in self._constraints]
+        closed_forms = [c.subs(mapping) for c in self._closed_forms]
+        return SymbolicClosedForm(constraints, closed_forms)
+
     def to_z3(self):
         res = {}
         for var in self.all_vars:
@@ -188,14 +177,19 @@ class SymbolicClosedForm:
             return set()
 
 class ExprClosedForm:
-    def __init__(self, closed_forms):
+    def __init__(self, closed_forms, ind_var):
         self._closed_forms = closed_forms
+        self._ind_var = ind_var
 
     def __str__(self):
         res = ''
         for expr, c in self._closed_forms.items():
             res += '%s: %s\n' % (expr, c)
         return res
+
+    def subs(self, mapping):
+        closed_forms = [c.subs(mapping) for c in self._closed_forms]
+        return ExprClosedForm(closed_forms)
 
     def to_z3(self):
         res = {utils.to_z3(expr): utils.to_z3(c) for expr, c in self._closed_forms.items()}

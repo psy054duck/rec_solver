@@ -1,7 +1,7 @@
 from rec_solver.core.solvable_polynomial import solve_solvable_map
 from rec_solver import solve_ultimately_periodic_initial, solve_ultimately_periodic_symbolic
 from rec_solver import parse_str, parse_file
-from rec_solver.core.poly_expr import poly_expr_solving
+from rec_solver import poly_expr_solving, solve_multivariate_rec
 from rec_solver.recurrence import Recurrence
 from rec_solver import utils
 import sympy as sp
@@ -16,10 +16,11 @@ def test():
     # s = '''a(0) = 0; b(0) = 1; i(0) = 0; if ((a(n) < 10)) { a(n+1) = a(n) + 10; b(n+1) = b(n) - 1; i(n+1) = i(n) + 1; } else if (a(n) < 11) { a(n+1) = a(n) + 1; b(n + 1) = b(n) + 2; i(n+1) = i(n) + 1; } else {a(n+1) = a(n) - 1; b(n+1) = b(n) - 1; i(n+1) = i(n) + 1; }'''
     s = '''a(0) = a; b(0) = b; if (a(n) < 10) { a(n+1) = a(n) + 1; b(n+1) = b(n) - 1; } else { a(n + 1) = a(n) + 2; b(n + 1) = b(n) - 3; }'''
     # rec1 = parse_str(s)
-    rec1 = parse_file('./examples/test2.txt')
+    rec1 = parse_file('./examples/test3.txt')
     # closed = solve_ultimately_periodic_initial(rec1)
     # closed = solve_ultimately_periodic_symbolic(rec1)
-    closed = poly_expr_solving(rec1, 1)
+    # closed = poly_expr_solving(rec1, 1)
+    closed = solve_multivariate_rec(rec1)
     print(closed)
     print(closed.to_z3())
     # rec2 = parser.parse(s2)

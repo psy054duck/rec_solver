@@ -25,7 +25,7 @@ def solve_ultimately_periodic_symbolic(rec: Recurrence, bnd=100, precondition=z3
     while z3_solver.check(acc_condition) != z3.unsat:
         i += 1
         model = z3_solver.model()
-        parameters = rec.get_symbolic_values_from_initial()
+        parameters = rec.get_symbolic_values()
         cur_val = {p: model.eval(utils.to_z3(p), model_completion=True).as_long() for p in parameters}
         initialized_rec = rec.subs(cur_val)
         _, index_seq = _solve_ultimately_periodic_initial(initialized_rec)
@@ -107,7 +107,7 @@ def _smallest_violation(n_range: sp.Interval, cond_range: sp.Interval, period, r
 
 def _compute_solution_by_index_seq(rec: Recurrence, index_seq):
     patterns = [seq for seq, _ in index_seq]
-    thresholds = [0] + [cnt for _, cnt in index_seq[:-1]]
+    thresholds = [0] + [cnt for _, cnt in index_seq[:-1]] + [sp.oo]
     nonconditional = [_solve_as_nonconditional(rec, pattern) for pattern in patterns]
     shift_closed = [closed.subs({closed.ind_var: closed.ind_var - shift}) for closed, shift in zip(nonconditional, thresholds)]
     initials = [rec.initial] + [closed.eval_at(t) for closed, t in zip(shift_closed, thresholds[1:])]
@@ -115,7 +115,8 @@ def _compute_solution_by_index_seq(rec: Recurrence, index_seq):
     for initial, closed, t in zip(initials, shift_closed, thresholds):
         mapping = {func(0): initial[func(t)] for func in rec.func_decls}
         closed_forms.append(closed.subs(mapping).subs(rec.initial))
-    return PiecewiseClosedForm(thresholds, closed_forms, rec.ind_var)
+    conditions = [sp.Interval(thresholds[i], thresholds[i + 1], left_open=False, right_open=True).as_relational(rec.ind_var) for i in range(len(thresholds) - 1)]
+    return PiecewiseClosedForm(conditions, closed_forms, rec.ind_var)
 
 def _compute_candidate_solution(rec: Recurrence, start, n, ith):
     values, index_seq = rec.get_n_values_starts_with(start, n)
@@ -153,12 +154,13 @@ def _solve_as_nonconditional(rec: Recurrence, seq):
 
 def _set_up_constraints(rec: Recurrence, closed_form: PiecewiseClosedForm, index_seq):
     rec_conditions = [utils.to_z3(cond) for cond in rec.conditions]
-    intervals = closed_form.intervals
+    # intervals = closed_form.intervals
     k = z3.Int('k')
     constraint = True
     ind_var = utils.to_z3(closed_form.ind_var)
     for i, (seq, q) in enumerate(index_seq):
-        premise = utils.interval_to_z3(intervals[i], closed_form.ind_var)
+        # premise = utils.interval_to_z3(intervals[i], closed_form.ind_var)
+        premise = utils.to_z3(closed_form.conditions[i])
         closed_form_component = closed_form.closed_forms[i]
         period = closed_form_component.period
         for r, j in enumerate(seq):
