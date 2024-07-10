@@ -12,6 +12,8 @@ class Recurrence:
         conditions = [branch[0] for branch in branches]
         self._conditions = Recurrence.make_exclusive_conditions(conditions)
         self._transitions = [branch[1] for branch in branches]
+        if len(self._conditions) > len(conditions):
+            self._transitions = [branch[1] for branch in branches] + [{}]
         self._initial = initial
         app = self.get_app()
         last_args = {a.args[-1] for a in app if not a.is_Symbol}
@@ -56,6 +58,8 @@ class Recurrence:
         for cond in conditions:
             exclusive_conditions.append(sp.simplify(sp.And(acc_neg, cond)))
             acc_neg = sp.And(acc_neg, sp.Not(cond))
+        if sp.simplify(acc_neg) != sp.false:
+            exclusive_conditions.append(acc_neg)
         return exclusive_conditions
 
     def get_n_values_starts_with(self, start, n):
@@ -236,7 +240,7 @@ class Recurrence:
     def _get_app_from_transitions(self):
         app = set()
         for trans in self.transitions:
-            trans_app = reduce(set.union, [utils.get_app(expr) for expr in trans.values()])
+            trans_app = reduce(set.union, [utils.get_app(expr) for expr in trans.values()], set())
             app = app | trans_app 
         return app
 

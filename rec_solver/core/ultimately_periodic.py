@@ -35,19 +35,23 @@ def solve_ultimately_periodic_symbolic(rec: Recurrence, bnd=100, precondition=z3
         can_sol = _compute_solution_by_index_seq(rec, index_seq_temp)
         constraint, k = _set_up_constraints(rec, can_sol, index_seq_temp)
         constraint = z3.And(constraint, *[utils.to_z3(q) >= 1 for q in qs])
+        logger.debug('In the %dth iteration: the index sequence is %s' % (i, index_seq))
         logger.debug('In the %dth iteration: the set up index sequence template is %s' % (i, index_seq_temp))
         logger.debug('In the %dth iteration: the closed-form solution is\n%s' % (i, can_sol))
         logger.debug('In the %dth iteration: the set up constraint is\n%s' % (i, constraint))
         q_linear = [utils.compute_q(constraint, q, parameters, k) for q in qs]
+        assert(q_linear is not None)
+        print(q_linear)
         constraint_no_q = z3.substitute(constraint, *[(utils.to_z3(q), linear) for q, linear in zip(qs, q_linear)])
         qe = z3.Tactic('qe')
+        # print(qe.apply(z3.ForAll(k, z3.Implies(k >= 0, constraint_no_q))))
         constraint_no_kq = z3.simplify(z3.And(*qe.apply(z3.ForAll(k, z3.Implies(k >= 0, constraint_no_q)))[0]))
         logger.debug('In the %dth iteration: the parameters satisfy\n%s' % (i, constraint_no_kq))
         acc_condition = z3.And(acc_condition, z3.Not(constraint_no_kq))
         constraints.append(constraint_no_kq)
         mapping = {q: sp.sympify(str(linear)) for q, linear in zip(qs, q_linear)}
         closed_forms.append(can_sol.simple_subs(mapping))
-    return SymbolicClosedForm(constraints, closed_forms)
+    return SymbolicClosedForm(constraints, closed_forms, rec.ind_var)
 
 def solve_ultimately_periodic_initial(rec: Recurrence, bnd=100):
     closed_form, _ = _solve_ultimately_periodic_initial(rec, bnd)
@@ -55,7 +59,7 @@ def solve_ultimately_periodic_initial(rec: Recurrence, bnd=100):
 
 def _solve_ultimately_periodic_initial(rec: Recurrence, bnd=100):
     assert(rec.is_all_initialized())
-    n = 1
+    n = 10
     start = 0
     ith = 1
     closed_form = PiecewiseClosedForm()
@@ -72,7 +76,7 @@ def _solve_ultimately_periodic_initial(rec: Recurrence, bnd=100):
         else:
             break
         ith += 1
-    return closed_form, acc_index_seq
+    return closed_form, utils.compress_seq(utils.flatten_seq(acc_index_seq))
 
 def verify(rec: Recurrence, candidate_sol: PiecewiseClosedForm, pattern: list):
     conditions = rec.conditions
@@ -107,14 +111,26 @@ def _smallest_violation(n_range: sp.Interval, cond_range: sp.Interval, period, r
 
 def _compute_solution_by_index_seq(rec: Recurrence, index_seq):
     patterns = [seq for seq, _ in index_seq]
-    thresholds = [0] + [cnt for _, cnt in index_seq[:-1]] + [sp.oo]
+    acc_thresholds = [sum(cnt for _, cnt in index_seq[:i]) for i in range(1, len(index_seq))]
+    nums = [cnt for _, cnt in index_seq]
+    # thresholds = [0] + [cnt for _, cnt in index_seq[:-1]] + [sp.oo]
+    thresholds = [0] + acc_thresholds + [sp.oo]
     nonconditional = [_solve_as_nonconditional(rec, pattern) for pattern in patterns]
     shift_closed = [closed.subs({closed.ind_var: closed.ind_var - shift}) for closed, shift in zip(nonconditional, thresholds)]
-    initials = [rec.initial] + [closed.eval_at(t) for closed, t in zip(shift_closed, thresholds[1:])]
+    # initials = [rec.initial] + [closed.eval_at(t) for closed, t in zip(shift_closed, thresholds[1:])]
+    # print(initials)
     closed_forms = []
-    for initial, closed, t in zip(initials, shift_closed, thresholds):
-        mapping = {func(0): initial[func(t)] for func in rec.func_decls}
-        closed_forms.append(closed.subs(mapping).subs(rec.initial))
+    # for initial, closed, t in zip(initials, shift_closed, thresholds):
+    #     mapping = {func(0): initial[func(t)] for func in rec.func_decls}
+    #     closed_forms.append(closed.subs(mapping).subs(rec.initial))
+    initial = rec.initial
+    acc = 0
+    for closed, t in zip(shift_closed, nums):
+        acc += t
+        closed_forms.append(closed.subs(initial))
+        initial = {k.func(0): v for k, v in closed_forms[-1].eval_at(acc).items()}
+
+    thresholds = [-sp.oo] + thresholds[1:]
     conditions = [sp.Interval(thresholds[i], thresholds[i + 1], left_open=False, right_open=True).as_relational(rec.ind_var) for i in range(len(thresholds) - 1)]
     return PiecewiseClosedForm(conditions, closed_forms, rec.ind_var)
 

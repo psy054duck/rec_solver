@@ -65,6 +65,14 @@ class PeriodicClosedForm:
         except:
             return set()
 
+    @property
+    def conditions(self):
+        return [i % self.period for i in range(self.period)]
+    
+    @property
+    def closed_forms(self) -> list[dict]:
+        return self._closed_form_list
+
 class PiecewiseClosedForm:
     def __init__(self, conditions=[], closed_forms=[], ind_var=sp.Symbol('n', integer=True)):
         self._conditions = conditions
@@ -100,10 +108,11 @@ class PiecewiseClosedForm:
         for var in self.all_vars:
             var_z3 = utils.to_z3(var)
             expr_z3 = closed_forms_z3[0][var_z3]
-            for i, interval in enumerate(self.intervals[:-1]):
-                cond = utils.interval_to_z3(interval, self.ind_var)
+            # for i, interval in enumerate(self.intervals[:-1]):
+            for i, cond in enumerate(self.conditions):
+                # cond = utils.interval_to_z3(interval, self.ind_var)
                 closed = closed_forms_z3[i][var_z3]
-                expr_z3 = z3.If(cond, closed, expr_z3)
+                expr_z3 = z3.If(utils.to_z3(cond), closed, expr_z3)
             res[var_z3] = z3.simplify(expr_z3)
         return res
 
@@ -124,7 +133,7 @@ class PiecewiseClosedForm:
         return res
 
     @property
-    def closed_forms(self):
+    def closed_forms(self) -> list[PeriodicClosedForm]:
         return self._closed_forms
 
     @property
@@ -143,9 +152,10 @@ class PiecewiseClosedForm:
             return set()
 
 class SymbolicClosedForm:
-    def __init__(self, constraints, closed_forms):
+    def __init__(self, constraints, closed_forms, ind_var):
         self._constraints = constraints
         self._closed_forms = closed_forms
+        self._ind_var = ind_var
 
     def __str__(self):
         res = ''
@@ -157,7 +167,7 @@ class SymbolicClosedForm:
     def subs(self, mapping):
         constraints = [z3.substitute(c, *[(utils.to_z3(k), utils.to_z3(v)) for k, v in mapping.items()]) for c in self._constraints]
         closed_forms = [c.subs(mapping) for c in self._closed_forms]
-        return SymbolicClosedForm(constraints, closed_forms)
+        return SymbolicClosedForm(constraints, closed_forms, self.ind_var)
 
     def to_z3(self):
         res = {}
@@ -168,6 +178,33 @@ class SymbolicClosedForm:
                 expr = z3.If(constraint, closed.to_z3()[var_z3], expr)
             res[var_z3] = z3.simplify(expr)
         return res
+
+    @property
+    def ind_var(self):
+        return self._ind_var
+
+    @property
+    def conditions(self):
+        conditions = []
+        for cons, piece_closed in zip(self._constraints, self.closed_forms):
+            for piece_cond, periodic_closed in zip(piece_closed.conditions, piece_closed.closed_forms):
+                period = periodic_closed.period
+                for i in range(period):
+                    cond = sp.sympify(str(cons)) & piece_cond & (self.ind_var % period == i)
+                    conditions.append(sp.simplify(cond))
+        return conditions
+
+    @property
+    def transitions(self):
+        closed_forms = []
+        for piece_closed in self.closed_forms:
+            for periodic_closed in piece_closed.closed_forms:
+                closed_forms.extend(periodic_closed.closed_forms)
+        return closed_forms
+                
+    @property
+    def closed_forms(self) -> list[PiecewiseClosedForm]:
+        return self._closed_forms
 
     @property
     def all_vars(self):

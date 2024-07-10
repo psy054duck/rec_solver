@@ -4,10 +4,10 @@ from ..recurrence import Recurrence
 from functools import reduce
 
 def solve_solvable_map(rec: Recurrence):
-    func_decls = rec.func_decls
     components = get_layers_for_solvable_map(rec)
     for component in components:
         partial_closed_form = solve_solvable_map_for_component(rec, component)
+        partial_closed_form = {k: c.subs(rec.initial, simultaneous=True) for k, c in partial_closed_form.items()}
         rec.simplify_with_partial_solution(partial_closed_form)
     return rec.closed_forms
 
@@ -67,21 +67,41 @@ def gen_polynomial_template_for_degree(ind_var, degr, name=""):
     return template, list(coeffs)
 
 def get_layers_for_solvable_map(rec: Recurrence):
-    digraph, functions = build_adjacency_matrix(rec)
-    components = utils.sorted_strong_ly_connected_components(digraph)
-    return [{functions[i] for i in component} for component in components]
+    # digraph, functions = build_adjacency_matrix(rec)
+    # components = utils.sorted_strong_ly_connected_components(digraph)
+    # return [{functions[i] for i in component} for component in components]
+    components = []
+    transition = rec.transitions[0]
+    functions = [func(rec.ind_var) for func in rec.func_decls]
+    considered = []
+    while set(considered) != set(functions):
+        cur_considered = []
+        considered_yet = set(functions) - set(considered)
+        for func in considered_yet:
+            func_next = func.subs({rec.ind_var: rec.ind_var + 1})
+            liner_part, poly_part = utils.split_linear_others(transition[func_next], functions, rec.ind_var)
+            all_apps = utils.get_app(poly_part)
+            if all_apps.issubset(set(considered)):
+                cur_considered.append(func)
+        digraph = build_adjacency_matrix(rec, cur_considered)
+        cs = utils.sorted_strong_ly_connected_components(digraph)
+        for c in cs:
+            components.append([cur_considered[i] for i in c])
+            considered.extend(components[-1])
+    return components
+        # considered.extend(cur_considered)
 
-def build_adjacency_matrix(rec: Recurrence):
+def build_adjacency_matrix(rec: Recurrence, projection):
     transition = rec.transitions[0]
     digraph = sp.zeros(len(rec.func_decls))
     functions = [func(rec.ind_var) for func in rec.func_decls]
-    for i, f_decl in enumerate(rec.func_decls):
-        f_n_1 = f_decl(rec.ind_var + 1)
+    for i, f_i in enumerate(projection):
+        f_n_1 = f_i.subs({rec.ind_var: rec.ind_var + 1})
         _, other_expr = utils.split_linear_others(transition[f_n_1], functions, rec.ind_var)
-        for j, f_decl_j in enumerate(rec.func_decls):
-            if f_decl_j in utils.get_func_decls(other_expr):
+        for j, f_j in enumerate(projection):
+            if f_j.func in utils.get_func_decls(other_expr):
                 digraph[i, j] = 1
-    return digraph, functions
+    return digraph
 
 def is_solvable_map(rec: Recurrence):
     conditions = rec.conditions

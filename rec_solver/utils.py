@@ -215,7 +215,7 @@ def compute_q(constraint, q, vars, ind_var):
     full_constraint = z3.ForAll(ind_var, z3.Implies(ind_var >= 0, constraint))
     constraint_solver.push()
     for _ in range(len(cs)):
-        constraint_solver.check(full_constraint)
+        if constraint_solver.check(full_constraint) == z3.unsat: break
         m = constraint_solver.model()
         point = [m.eval(var, True) for var in variables]
         eq_solver.add(m.eval(q_z3, True) == z3.substitute(template, *list(zip(variables, point))))
@@ -235,9 +235,12 @@ def compute_q(constraint, q, vars, ind_var):
     res = constraint_solver.check(q_z3 != linear_expr, full_constraint)
     if res == z3.sat:
         return None
-    return linear_expr
+    return z3.simplify(linear_expr)
 
 def is_same_transition(trans1, trans2):
     if set(trans1.keys()) != set(trans2.keys()):
         return False
     return all([sp.simplify(sp.Eq(trans1[k], trans2[k])) for k in trans1])
+
+def flatten_seq(seq):
+    return sum([l*c for l, c in seq], [])
