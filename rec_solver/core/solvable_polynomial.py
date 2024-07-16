@@ -5,7 +5,6 @@ from functools import reduce
 
 def solve_solvable_map(rec: Recurrence):
     components = get_layers_for_solvable_map(rec)
-    print(components)
     for component in components:
         partial_closed_form = solve_solvable_map_for_component(rec, component)
         partial_closed_form = {k: c.subs(rec.initial, simultaneous=True) for k, c in partial_closed_form.items()}
