@@ -22,6 +22,8 @@ def solve_ultimately_periodic_symbolic(rec: Recurrence, bnd=100, precondition=z3
     logger.debug("Solving recurrence %s" % rec)
     constraints = []
     closed_forms = []
+    if rec.is_all_initialized():
+        return solve_ultimately_periodic_initial(rec, bnd)
     while z3_solver.check(acc_condition) != z3.unsat:
         i += 1
         model = z3_solver.model()

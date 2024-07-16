@@ -11,6 +11,7 @@ class PeriodicClosedForm:
         if self.period == 1:
             r = 0
         else:
+            print(n >= 0)
             assert(n >= 0)
             r = n % self.period
         val = {k.subs({self.ind_var: n}, simultaneous=True): c.subs({self.ind_var: n}, simultaneous=True) for k, c in self._closed_form_list[r].items()}

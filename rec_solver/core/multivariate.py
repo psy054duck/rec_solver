@@ -1,6 +1,8 @@
 import sympy as sp
+import z3
 from ..recurrence import Recurrence
 from .ultimately_periodic import solve_ultimately_periodic_symbolic
+from .. import utils
 
 def solve_multivariate_rec(rec: Recurrence):
     scalar_rec = rec.project_to_scalars()
@@ -46,6 +48,11 @@ def solve_multivariate_rec(rec: Recurrence):
     initial = {t(zero): arg for t, arg in zip(ts, array_func.args)} | {e(zero): sp.Integer(1)} | {acc(zero): zero}
     t_rec = Recurrence(initial, branches)
     t_closed = solve_ultimately_periodic_symbolic(t_rec)
-    print('*'*100)
-    print(t_closed.subs({d: rec.ind_var}))
+    closed_back = t_closed.subs({d: rec.ind_var})
+    sim = z3.Tactic('ctx-solver-simplify')
+    for cond, trans in zip(closed_back.conditions, closed_back.transitions):
+        cond_z3 = utils.to_z3(cond & sp.And(*[u >= 0 for u in array_func.args]))
+        cond_z3 = z3.And(*sim(cond_z3)[0])
+        if not z3.is_false(z3.simplify(cond_z3)):
+            print(cond_z3, trans)
         # print(cond.subs(mapping, simultaneous=True))

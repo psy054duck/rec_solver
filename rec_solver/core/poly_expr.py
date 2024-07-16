@@ -98,4 +98,4 @@ def poly_expr_solving(rec: Recurrence, degr=2):
         for p in instances:
             expr, closed = solve_rec(k, p, transitions, rec.initial, rec.ind_var)
             closed_forms[expr] = closed
-    return ExprClosedForm(closed_forms)
+    return ExprClosedForm(closed_forms, rec.ind_var)

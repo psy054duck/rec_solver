@@ -5,6 +5,7 @@ from functools import reduce
 
 def solve_solvable_map(rec: Recurrence):
     components = get_layers_for_solvable_map(rec)
+    print(components)
     for component in components:
         partial_closed_form = solve_solvable_map_for_component(rec, component)
         partial_closed_form = {k: c.subs(rec.initial, simultaneous=True) for k, c in partial_closed_form.items()}
@@ -97,9 +98,10 @@ def build_adjacency_matrix(rec: Recurrence, projection):
     functions = [func(rec.ind_var) for func in rec.func_decls]
     for i, f_i in enumerate(projection):
         f_n_1 = f_i.subs({rec.ind_var: rec.ind_var + 1})
-        _, other_expr = utils.split_linear_others(transition[f_n_1], functions, rec.ind_var)
+        # _, other_expr = utils.split_linear_others(transition[f_n_1], functions, rec.ind_var)
         for j, f_j in enumerate(projection):
-            if f_j.func in utils.get_func_decls(other_expr):
+            # if f_j.func in utils.get_func_decls(other_expr):
+            if f_j.func in utils.get_func_decls(transition[f_n_1]):
                 digraph[i, j] = 1
     return digraph
 
