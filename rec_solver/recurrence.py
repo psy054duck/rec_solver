@@ -86,7 +86,7 @@ class Recurrence:
         return first_n_values, index_seq
 
     def is_all_initialized(self):
-        return all((func_decl(0) in self.initial for func_decl in self.func_decls))
+        return len(self.get_symbolic_values()) == 0 and all([e.is_number for e in self.initial.values()]) and all((func_decl(0) in self.initial for func_decl in self.func_decls))
 
     def run_one_iteration_for_ith_transition(self, cur_value, ith):
         transition = self.transitions[ith]
