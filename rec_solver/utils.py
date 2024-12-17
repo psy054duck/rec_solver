@@ -6,6 +6,14 @@ from sympy.core.function import UndefinedFunction
 import z3
 # import cvc5.pythonic as z3
 
+def to_sympy(s_z3):
+    s = str(s_z3)
+    expr = sp.parse_expr(s)
+    symbols = expr.free_symbols
+    symbols2int = {s: sp.Symbol(s.name, integer=True) for s in symbols}
+    return expr.subs(symbols2int, simultaneous=True)
+    
+
 def is_linear(expr, terms):
     '''Check whether "expr" is linear in terms of "terms"'''
     for x in terms:

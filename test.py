@@ -2,7 +2,7 @@ from rec_solver.core.solvable_polynomial import solve_solvable_map
 from rec_solver import solve_ultimately_periodic_initial, solve_ultimately_periodic_symbolic
 from rec_solver import parse_str, parse_file
 from rec_solver import poly_expr_solving, solve_multivariate_rec
-from rec_solver.recurrence import Recurrence
+from rec_solver.recurrence import Recurrence, MultiRecurrence
 from rec_solver import utils
 import sympy as sp
 
@@ -45,8 +45,42 @@ def test_compression():
     seq = '1 1 1 1 1 1 1 1 1 0 1 0 1 0 1 0 1'.split()
     print(utils.compress_seq(seq))
 
+def test_multirec():
+    n = sp.Symbol('n', integer=True)
+    f = sp.Function('f')
+    a0 = sp.Symbol('a0', integer=True)
+    a1 = sp.Symbol('a1', integer=True)
+    conditions = [n <= 0, sp.Eq(n, 1), n > 1]
+    recursive_calls = [{}, {}, {a0: f(n - 1), a1: f(n - 2)}]
+    # post_ops = [sp.Integer(0), sp.Integer(1), a0 + a1]
+    post_ops = [sp.Integer(0), sp.Integer(1), a0 + a1]
+    operations = list(zip(recursive_calls, post_ops))
+    branches = list(zip(conditions, operations))
+    rec = MultiRecurrence(f(n), branches)
+    print(rec.conditions)
+    print(rec.recursive_calls)
+    print(rec.post_ops)
+    print(rec.func_decl)
+    print(rec.is_nearly_tail())
+
+def test_rec_sum():
+    n = sp.Symbol('n', integer=True)
+    m = sp.Symbol('m', integer=True)
+    f = sp.Function('f')
+    a0 = sp.Symbol('a0', integer=True)
+    conditions = [n <= 0, n > 0]
+    # recursive_calls = [{}, {a0: f(n - 1)}]
+    # post_ops = [sp.Integer(0), a0 + 1]
+    recursive_calls = [{}, {a0: f(n - 1, m + 1)}]
+    post_ops = [n + m, a0]
+    operations = list(zip(recursive_calls, post_ops))
+    branches = list(zip(conditions, operations))
+    rec = MultiRecurrence(f(n, m), branches)
+    solve_multivariate_rec(rec)
+
 if __name__ == '__main__':
-    test()
+    test_rec_sum()
+    # test()
     # test_get_terms()
     # test_get_exponential_factor()
     # test_compression()

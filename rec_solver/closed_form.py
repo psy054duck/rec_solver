@@ -1,6 +1,7 @@
 import z3
 import sympy as sp
 from . import utils
+from collections import defaultdict
 
 class PeriodicClosedForm:
     def __init__(self, closed_form_list, ind_var):
@@ -15,6 +16,23 @@ class PeriodicClosedForm:
             r = n % self.period
         val = {k.subs({self.ind_var: n}, simultaneous=True): c.subs({self.ind_var: n}, simultaneous=True) for k, c in self._closed_form_list[r].items()}
         return val
+
+    def sympify(self):
+        sympified = defaultdict(list)
+        for i in range(self.period):
+            cond = True
+            if self.period != 1:
+                cond = sp.Eq(self.ind_var % self.period, i)
+            for f in self.closed_forms[i]:
+                sympified[f].append((self.closed_forms[i][f], cond))
+        return {f: sp.Piecewise(*sympified[f]) for f in sympified}
+
+    def pprint(self):
+        sp.init_printing()
+        sp_dict = self.sympify()
+        for f in sp_dict:
+            sp.pprint(sp.Eq(f, sp_dict[f]))
+            print()
 
     def subs(self, mapping):
         new_list = []
@@ -91,6 +109,14 @@ class PiecewiseClosedForm:
         which = fired.index(True) - 1
         return self.closed_forms[which].subs({self.ind_var: n})
 
+    def sympify(self):
+        expressions = defaultdict(list)
+        for cond, closed in zip(self.conditions, self.closed_forms):
+            sp_closed = closed.sympify()
+            for f in sp_closed:
+                expressions[f].append((sp_closed[f], cond))
+        return {f: sp.Piecewise(*expressions[f]) for f in expressions}
+
     def subs(self, mapping):
         conditions = [c.subs(mapping, simultaneous=True) for c in self.conditions]
         closed_forms = [c.subs(mapping) for c in self.closed_forms]
@@ -164,6 +190,30 @@ class SymbolicClosedForm:
             res += '\t' + str(closed)
         return res
 
+    def sympify(self):
+        expressions = defaultdict(list)
+        for cond, closed in zip(self._constraints, self._closed_forms):
+            sp_closed = closed.sympify()
+            sp_cond = sp.parse_expr(str(cond))
+            to_integer_dict = {}
+            for symbol in sp_cond.free_symbols:
+                to_integer_dict[symbol] = sp.Symbol(symbol.name, integer=True)
+            sp_cond = sp_cond.subs(to_integer_dict, simultaneous=True)
+            for f in sp_closed:
+                expressions[f].append((sp_closed[f].subs(to_integer_dict, simultaneous=True), sp_cond))
+        for f in expressions:
+            last_closed, _ = expressions[f][-1]
+            expressions[f][-1] = (last_closed, True)
+        # return {f: sp.piecewise_exclusive(sp.piecewise_fold(sp.Piecewise(*expressions[f]))) for f in expressions}
+        return {f: sp.piecewise_fold(sp.Piecewise(*expressions[f])) for f in expressions}
+
+    def pprint(self):
+        sp.init_printing()
+        sp_dict = self.sympify()
+        for f in sp_dict:
+            sp.pprint(sp.simplify(sp.Eq(f, sp_dict[f])))
+            print()
+
     def subs(self, mapping):
         constraints = [z3.substitute(c, *[(utils.to_z3(k), utils.to_z3(v)) for k, v in mapping.items()]) for c in self._constraints]
         closed_forms = [c.subs(mapping) for c in self._closed_forms]
@@ -205,6 +255,10 @@ class SymbolicClosedForm:
     @property
     def closed_forms(self) -> list[PiecewiseClosedForm]:
         return self._closed_forms
+
+    @property
+    def cases(self):
+        return self._constraints
 
     @property
     def all_vars(self):

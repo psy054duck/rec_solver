@@ -43,7 +43,6 @@ def solve_ultimately_periodic_symbolic(rec: Recurrence, bnd=100, precondition=z3
         logger.debug('In the %dth iteration: the set up constraint is\n%s' % (i, constraint))
         q_linear = [utils.compute_q(constraint, q, parameters, k) for q in qs]
         assert(q_linear is not None)
-        print(q_linear)
         constraint_no_q = z3.substitute(constraint, *[(utils.to_z3(q), linear) for q, linear in zip(qs, q_linear)])
         qe = z3.Tactic('qe')
         # print(qe.apply(z3.ForAll(k, z3.Implies(k >= 0, constraint_no_q))))
@@ -52,6 +51,9 @@ def solve_ultimately_periodic_symbolic(rec: Recurrence, bnd=100, precondition=z3
         acc_condition = z3.And(acc_condition, z3.Not(constraint_no_kq))
         constraints.append(constraint_no_kq)
         mapping = {q: sp.sympify(str(linear)) for q, linear in zip(qs, q_linear)}
+        for q in mapping:
+            symbols = mapping[q].free_symbols
+            mapping[q] = mapping[q].subs({s: sp.Symbol(s.name, integer=True) for s in symbols})
         closed_forms.append(can_sol.simple_subs(mapping))
     return SymbolicClosedForm(constraints, closed_forms, rec.ind_var)
 
@@ -87,8 +89,8 @@ def verify(rec: Recurrence, candidate_sol: PiecewiseClosedForm, pattern: list):
     assert(isinstance(last_closed_form, PeriodicClosedForm))
     period = last_closed_form.period
     periodic_index_seq, _ = pattern[-1]
-    n = sp.Symbol('n', integer=True)
-    k = sp.Symbol('k', integer=True)
+    n = sp.Symbol('__n', integer=True)
+    k = sp.Symbol('__k', integer=True)
     n_range = n >= start
     smallest = sp.oo
     for r, i in enumerate(periodic_index_seq):

@@ -2,6 +2,44 @@ import sympy as sp
 from sympy.core.function import AppliedUndef
 from . import utils
 from functools import reduce
+from collections import defaultdict
+
+class MultiRecurrence:
+    def __init__(self, func_sig, branches):
+        self.conditions = [branch[0] for branch in branches]
+        operations = [branch[1] for branch in branches]
+        # for the recursive case,
+        # an operation should consists of an ordered list of recursive calls
+        # followed by an linear transformation on them,
+        # whose result is the returned value for this case.
+        self.recursive_calls = [op[0] for op in operations]
+        self.post_ops = [op[1] for op in operations]
+        self.func_sig = func_sig
+
+    def is_nearly_tail(self):
+        return all([len(calls) <= 1 for calls in self.recursive_calls])
+
+    def get_base_cases(self):
+        conditions, _, post_ops = self._get_cases()
+        return conditions, post_ops
+
+    def get_rec_cases(self):
+        return self._get_cases(False)
+
+    def _get_cases(self, is_base=True):
+        p = lambda calls: len(calls) == 0
+        if not is_base:
+             p = lambda calls: len(calls) > 0
+        conditions = []
+        recursive_calls = []
+        post_ops = []
+        for i, rec_calls in enumerate(self.recursive_calls):
+            if p(rec_calls):
+                conditions.append(self.conditions[i])
+                recursive_calls.append(self.recursive_calls[i])
+                post_ops.append(self.post_ops[i])
+        return conditions, recursive_calls, post_ops
+
 
 class Recurrence:
     def __init__(self, initial, branches):
@@ -25,6 +63,11 @@ class Recurrence:
         zero_indexed_func_apps = [func_decl(sp.Integer(0)) for func_decl in self.func_decls if all([narg == 1 for narg in func_decl.nargs])]
         self._initial = {zero_app: initial.get(zero_app, zero_app) for zero_app in zero_indexed_func_apps}
         self._closed_forms = {}
+
+    @staticmethod
+    def mk_rec(initial, conditions, transitions):
+        branches = list(zip(conditions, transitions))
+        return Recurrence(initial, branches)
 
     def _padding_transitions(self, transitions, all_funcs):
         new_transitions = []
@@ -246,3 +289,21 @@ class Recurrence:
 
     def _get_initial_func(self):
         return {app.func for app in self.initial if not app.is_Symbol}
+
+    def sympify(self):
+        exp = defaultdict(list)
+        for cond, trans in zip(self.conditions, self.transitions):
+            for f in trans:
+                exp[f].append((trans[f], cond))
+        return {f: sp.Piecewise(*exp[f]) for f in exp}
+
+    def pprint(self):
+        sp.init_printing()
+        rec_sym = self.sympify()
+        for f in self.initial:
+            sp.pprint(sp.Eq(f, self.initial[f]))
+        print()
+        for f in rec_sym:
+            sp.pprint(sp.Eq(f, rec_sym[f]))
+            print()
+
