@@ -5,7 +5,7 @@ import z3
 from functools import reduce
 
 from .. import utils
-from ..recurrence import Recurrence
+from ..recurrence import Recurrence, LoopRecurrence
 from ..closed_form import PeriodicClosedForm, PiecewiseClosedForm, SymbolicClosedForm
 from .solvable_polynomial import solve_solvable_map, is_solvable_map
 
@@ -156,7 +156,7 @@ def _compute_candidate_solution(rec: Recurrence, start, n, ith):
     return sol, compressed_seq
 
 def _solve_as_nonconditional(rec: Recurrence, seq):
-    new_rec = Recurrence.build_nonconditional_from_rec_by_seq(rec, seq, {})
+    new_rec = LoopRecurrence.build_nonconditional_from_rec_by_seq(rec, seq, {})
     period = len(seq)
     if is_solvable_map(new_rec):
         closed_form = []

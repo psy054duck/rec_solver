@@ -9,6 +9,8 @@ import z3
 def to_sympy(s_z3):
     s = str(s_z3)
     expr = sp.parse_expr(s)
+    if expr is True:
+        return sp.true
     symbols = expr.free_symbols
     symbols2int = {s: sp.Symbol(s.name, integer=True) for s in symbols}
     return expr.subs(symbols2int, simultaneous=True)

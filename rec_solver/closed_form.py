@@ -195,6 +195,8 @@ class SymbolicClosedForm:
         for cond, closed in zip(self._constraints, self._closed_forms):
             sp_closed = closed.sympify()
             sp_cond = sp.parse_expr(str(cond))
+            if sp_cond is True:
+                sp_cond = sp.true
             to_integer_dict = {}
             for symbol in sp_cond.free_symbols:
                 to_integer_dict[symbol] = sp.Symbol(symbol.name, integer=True)

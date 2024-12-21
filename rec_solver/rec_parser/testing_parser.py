@@ -4,13 +4,16 @@ import sympy as sp
 from ..recurrence import Recurrence
 
 def p_recurrence(p):
-    '''recurrence : if'''
-    # p[0] = Recurrence(p[1], p[2])
-    p[0] = Recurrence(p[1])
+    '''recurrence : base_cases recursive_cases'''
+    p[0] = Recurrence(p[1], p[2])
 
-# def p_initialization(p):
-#     '''initialization : assignments'''
-#     p[0] = p[1]
+def p_base_cases(p):
+    '''base_cases : assignments'''
+    p[0] = p[1]
+
+def p_recursive_cases(p):
+    '''recursive_cases : if_statements'''
+    p[0] = p[1]
 
 def p_assignments_1(p):
     '''assignments : assignment assignments'''
@@ -20,9 +23,29 @@ def p_assignments_2(p):
     '''assignments : '''
     p[0] = {}
 
-def p_assignment(p):
-    '''assignment : lhs ASSIGN expression SEMI'''
+def p_assignment_part(p):
+    '''assignment_part : lhs ASSIGN expression'''
     p[0] = {p[1]: p[3]}
+
+def p_assignment_empty_end(p):
+    '''assignment_end : SEMI'''
+    p[0] = sp.true
+
+def p_assignment_conditional_end(p):
+    '''assignment_end : if SEMI'''
+    p[0] = p[1]
+
+def p_assignment(p):
+    '''assignment : assignment_part assignment_end'''
+    p[0] = p[1]
+
+# def p_assignment_without_guard(p):
+#     '''assignment : assignment_part SEMI'''
+#     p[0] = p[1]
+# 
+# def p_assignment_with_guard(p):
+#     '''assignment : assignment_part assignment_guard SEMI'''
+#     p[0] = p[1]
 
 def p_expression_plus(p):
     '''expression : expression PLUS term'''
@@ -75,24 +98,28 @@ def p_factor_paren(p):
     '''factor : LPAREN expression RPAREN'''
     p[0] = p[2]
 
+def p_if(p):
+    '''if : IF LPAREN condition RPAREN'''
+    p[0] = p[3]
+
 def p_if_1(p):
-    '''if : IF LPAREN condition RPAREN LBRACE assignments RBRACE'''
-    cond = p[3]
-    assignments = p[6]
+    '''if_statements : if LBRACE assignments RBRACE'''
+    cond = p[1]
+    assignments = p[3]
     p[0] = [(cond, assignments)]
 
 def p_if_2(p):
-    '''if : IF LPAREN condition RPAREN LBRACE assignments RBRACE else'''
-    cond = p[3]
-    assignments = p[6]
-    p[0] = [(cond, assignments)] + p[8]
+    '''if_statements : if LBRACE assignments RBRACE else'''
+    cond = p[1]
+    assignments = p[3]
+    p[0] = [(cond, assignments)] + p[5]
 
 def p_else_1(p):
     '''else : ELSE LBRACE assignments RBRACE'''
     p[0] = [(sp.true, p[3])]
 
 def p_else_2(p):
-    '''else : ELSE if'''
+    '''else : ELSE if_statements'''
     p[0] = p[2]
 
 def p_condition_atom_GT(p):

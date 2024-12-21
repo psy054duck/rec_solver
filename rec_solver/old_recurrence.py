@@ -4,140 +4,17 @@ from . import utils
 from functools import reduce
 from collections import defaultdict
 
-class Recurrence:
-    def __new__(cls, branches):
-        base_conditions, base_transitions, recursive_conditions, recursive_transitions = Recurrence.divide_to_base_and_recursive(branches)
-        if Recurrence.is_loop_recurrence(branches):
-            ind_var = Recurrence.get_possible_ind_var(recursive_transitions)
-            assert(len(base_transitions) == 1)
-            base_transition = base_transitions[0]
-            initial = {f.subs({ind_var: 0}, simultaneous=True): base_transition[f] for f in base_transition}
-            new_branches = list(zip(recursive_conditions, recursive_transitions))
-            return LoopRecurrence(initial, new_branches)
-        else:
-            random_rec_case = recursive_transitions[0]
-            func_sig = list(random_rec_case.keys())[0]
-            return MultiRecurrence(func_sig, branches)
-
-    @staticmethod
-    def divide_to_base_and_recursive(branches):
-        base_conditions = []
-        recursive_conditions = []
-        base_transitions = []
-        recursive_transitions = []
-        for cond, trans in branches:
-            if Recurrence.is_base_condition(cond) and Recurrence.is_base_transition(trans):
-                base_conditions.append(cond)
-                base_transitions.append(trans)
-            else:
-                recursive_conditions.append(cond)
-                recursive_transitions.append(trans)
-        return base_conditions, base_transitions, recursive_conditions, recursive_transitions
-
-    @staticmethod
-    def is_base_condition(cond):
-        return len(cond.atoms(AppliedUndef)) == 0
-
-    @staticmethod
-    def is_base_transition(trans):
-        return all([len(e.atoms(AppliedUndef)) == 0 for e in trans.values()])
-
-    @staticmethod
-    def is_loop_recurrence(branches):
-        conditions = [branch[0] for branch in branches]
-        transitions = [branch[1] for branch in branches]
-        for cond, trans in zip(conditions, transitions):
-            applied_func = cond.atoms(AppliedUndef)
-            # applied_func |= reduce(set.union, [set(trans.keys()) | set(trans.values()) for trans in trans])
-            applied_func |= reduce(set.union, [e.atoms(AppliedUndef) for e in trans.keys()])
-            applied_func |= reduce(set.union, [e.atoms(AppliedUndef) for e in trans.values()])
-            # applied_func |= set(trans.keys()) | set(trans.values())
-            # check if all functions are univariate
-            if not all([list(f.nargs)[0] == 1 for f in applied_func]):
-                return False
-            # check if the inductive variable is the only symbol in arguments
-            ind_var = Recurrence.get_possible_ind_var(transitions)
-            args = reduce(set.union, [set(f.args) for f in applied_func])
-            if not all([len(arg.free_symbols) == 1 for arg in args]) and not all([list(arg.free_symbols)[0] == ind_var for arg in args]):
-                return False
-            # check if all recursive cases are of form f(n + 1) = g(f(n))
-            if not all([arg - ind_var == 0 or arg - ind_var - 1 == 0 for arg in args]):
-                return False
-        return True
-
-    @staticmethod
-    def make_exclusive_conditions(conditions):
-        acc_neg = sp.true
-        exclusive_conditions = []
-        for cond in conditions:
-            exclusive_conditions.append(sp.simplify(sp.And(acc_neg, cond)))
-            acc_neg = sp.And(acc_neg, sp.Not(cond))
-        if sp.simplify(acc_neg) != sp.false:
-            exclusive_conditions.append(acc_neg)
-        return exclusive_conditions
-
-    @staticmethod
-    def get_initial(conditions, transitions, ind_var):
-        '''get the initial values if the recurrence is from a loop'''
-        assert(Recurrence.is_loop_recurrence(conditions, transitions))
-        for cond, trans in zip(conditions, transitions):
-            if Recurrence.is_base_condition(cond) and Recurrence.is_base_transition(trans):
-                # assume cond is of form n == 0, where 'n' is the loop counter and c is a constant
-                initial = {f.subs({ind_var: 0}): trans[f] for f in trans}
-                break
-        else:
-            raise Exception('there is no base case')
-        return initial
-
-    @staticmethod
-    def get_possible_ind_var(transitions):
-        '''treat the only symbol in the first argument as the inductive variable'''
-        first_trans = transitions[0]
-        first_applied_func = list(first_trans.keys())[0]
-        first_arg = first_applied_func.args[0]
-        return list(first_arg.free_symbols)[0]
-
 class MultiRecurrence:
     def __init__(self, func_sig, branches):
-        conditions = [branch[0] for branch in branches]
-        self.conditions = Recurrence.make_exclusive_conditions(conditions)
-        self.transitions = [branch[1] for branch in branches]
+        self.conditions = [branch[0] for branch in branches]
+        operations = [branch[1] for branch in branches]
         # for the recursive case,
-        # an operation should consists of dictionary of recursive calls
+        # an operation should consists of an ordered list of recursive calls
         # followed by an linear transformation on them,
         # whose result is the returned value for this case.
-        self.recursive_calls, self.post_ops = self._preprocess_transitions(self.transitions)
+        self.recursive_calls = [op[0] for op in operations]
+        self.post_ops = [op[1] for op in operations]
         self.func_sig = func_sig
-
-    def _preprocess_transitions(self, transitions):
-        recursive_calls = []
-        post_ops = []
-        for trans in transitions:
-            assert(len(trans.keys()) == 1)
-            rhs = list(trans.values())[0]
-            func_apps = list(rhs.atoms(AppliedUndef))
-            named_calls = {sp.Symbol('a%d' % i, integer=True): func_apps[i] for i in range(len(func_apps))}
-            call_names = {func_apps[i]: sp.Symbol('a%d' % i, integer=True) for i in range(len(func_apps))}
-            post_op = rhs.subs(call_names, simultaneous=True)
-            recursive_calls.append(named_calls)
-            post_ops.append(post_op)
-        return recursive_calls, post_ops
-
-    def sympify(self):
-        exp = defaultdict(list)
-        for cond, trans in zip(self.conditions, self.transitions):
-            for f in trans:
-                exp[f].append((trans[f], cond))
-        return {f: sp.Piecewise(*exp[f]) for f in exp}
-
-
-    def pprint(self):
-        sp.init_printing()
-        rec_sym = self.sympify()
-        for f in rec_sym:
-            sp.pprint(sp.Eq(f, rec_sym[f]))
-            print()
-
 
     def is_nearly_tail(self):
         return all([len(calls) <= 1 for calls in self.recursive_calls])
@@ -163,7 +40,8 @@ class MultiRecurrence:
                 post_ops.append(self.post_ops[i])
         return conditions, recursive_calls, post_ops
 
-class LoopRecurrence:
+
+class Recurrence:
     def __init__(self, initial, branches):
         self._preprocess(initial, branches)
         self.cached_result = {}
@@ -186,23 +64,10 @@ class LoopRecurrence:
         self._initial = {zero_app: initial.get(zero_app, zero_app) for zero_app in zero_indexed_func_apps}
         self._closed_forms = {}
 
-    # def __init__(self, branches):
-    #     self._base_conditions = []
-    #     self._recursive_conditions = []
-    #     self._base_transitions = []
-    #     self._recursive_transitions = []
-    #     for cond, trans in branches:
-    #         if self.is_base_case(cond, trans):
-    #             self._base_conditions.append(cond)
-    #             self._base_transitions.append(trans)
-    #         else:
-    #             self._recursive_conditions.append(cond)
-    #             self._recursive_transitions.append(trans)
-        
     @staticmethod
     def mk_rec(initial, conditions, transitions):
         branches = list(zip(conditions, transitions))
-        return LoopRecurrence(initial, branches)
+        return Recurrence(initial, branches)
 
     def _padding_transitions(self, transitions, all_funcs):
         new_transitions = []
@@ -223,13 +88,22 @@ class LoopRecurrence:
         conditions = [c.subs(mapping, simultaneous=True) for c in self.conditions]
         transitions = [{k: trans[k].subs(mapping, simultaneous=True) for k in trans} for trans in self.transitions]
         branches = list(zip(conditions, transitions))
-        return LoopRecurrence(initial, branches)
+        return Recurrence(initial, branches)
 
     def copy_rec_with_diff_initial(self, new_initial):
         branches = list(zip(self.conditions, self.transitions))
-        return LoopRecurrence(new_initial, branches)
+        return Recurrence(new_initial, branches)
 
-
+    @staticmethod
+    def make_exclusive_conditions(conditions):
+        acc_neg = sp.true
+        exclusive_conditions = []
+        for cond in conditions:
+            exclusive_conditions.append(sp.simplify(sp.And(acc_neg, cond)))
+            acc_neg = sp.And(acc_neg, sp.Not(cond))
+        if sp.simplify(acc_neg) != sp.false:
+            exclusive_conditions.append(acc_neg)
+        return exclusive_conditions
 
     def get_n_values_starts_with(self, start, n):
         first_values, index_seq = self.get_first_n_values(start + n)
@@ -312,31 +186,13 @@ class LoopRecurrence:
     def ind_var(self, var):
         self._ind_var = var
 
-    # @property
-    # def base_conditions(self):
-    #     return self._base_conditions.copy()
-
-    # @property
-    # def base_transitions(self):
-    #     return self._base_transitions.copy()
-
-    # @property
-    # def recursive_conditions(self):
-    #     return self._recursive_conditions.copy()
-
-    # @property
-    # def recursive_transitions(self):
-    #     return self._recursive_transitions.copy()
-
     @property
     def conditions(self):
         return self._conditions.copy()
-        # return self.base_conditions + self.recursive_conditions
 
     @property
     def transitions(self):
         return self._transitions.copy()
-        # return self.base_transitions + self.recursive_transitions
 
     @property
     def initial(self):

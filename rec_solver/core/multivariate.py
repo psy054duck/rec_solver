@@ -1,6 +1,6 @@
 import sympy as sp
 import z3
-from ..recurrence import MultiRecurrence, Recurrence
+from ..recurrence import MultiRecurrence, Recurrence, LoopRecurrence
 from .ultimately_periodic import solve_ultimately_periodic_symbolic
 from .. import utils
 from functools import reduce
@@ -16,8 +16,8 @@ def solve_nearly_tail(rec: MultiRecurrence):
     loop_rec = nearly_tail2loop(rec, d, ret)
     loop_guard = get_loop_cond(rec, d)
     loop_closed_form = solve_ultimately_periodic_symbolic(loop_rec)
-    piecewise_D = compute_piecewise_D(d, D, loop_guard, loop_closed_form)
     loop_closed_form.pprint()
+    piecewise_D = compute_piecewise_D(d, D, loop_guard, loop_closed_form)
     scalar_closed_form = loop_closed_form.subs({d: piecewise_D})
     base_conditions, base_post_ops = rec.get_base_cases()
     branches = []
@@ -58,7 +58,7 @@ def nearly_tail2loop(rec: MultiRecurrence, d, ret):
         transition |= {ret_func(d + 1): post_op.subs({name_rec: ret_func(d)} | args_func_d, simultaneous=True)}
         transitions.append(transition)
     initial = {args_func_map[ret](0): ret} | {symbol2func(arg)(0): arg for arg in args}
-    loop_rec = Recurrence.mk_rec(initial, loop_branch_conditions, transitions)
+    loop_rec = LoopRecurrence.mk_rec(initial, loop_branch_conditions, transitions)
     return loop_rec
 
 def get_loop_cond(rec: MultiRecurrence, d):
@@ -115,7 +115,7 @@ def compute_D_by_case(d, D, loop_cond, case):
     #     then this query should also be linear by farkas lemma
     for _ in range(bnd):
         res = solver.check()
-        if res == z3.sat:
+        if res == z3.sat or res == z3.unsat:
             break
     if res == z3.sat:
         m = solver.model()
@@ -123,14 +123,13 @@ def compute_D_by_case(d, D, loop_cond, case):
         raise Exception('cannot compute D')
     return utils.to_sympy(m.eval(linear_comb/deno))
 
-
-
 def symbol2func(sym):
     return sp.Function(sym.name, nargs=1)
 
 def solve_multivariate_rec(rec: MultiRecurrence):
     closed_form = solve_nearly_tail(rec)
-    sp.pprint(sp.simplify(closed_form))
+    # sp.pprint(sp.simplify(closed_form))
+    return sp.simplify(closed_form)
 # f(n, M)
 #   if base_1(n): Mb_1
 #   elif base_2(n): Mb_2
