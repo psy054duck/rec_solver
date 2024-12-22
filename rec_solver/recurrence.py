@@ -17,7 +17,7 @@ class Recurrence:
         else:
             random_rec_case = recursive_transitions[0]
             func_sig = list(random_rec_case.keys())[0]
-            return MultiRecurrence(func_sig, branches)
+            return MultiRecurrence(branches)
 
     @staticmethod
     def divide_to_base_and_recursive(branches):
@@ -98,16 +98,39 @@ class Recurrence:
         return list(first_arg.free_symbols)[0]
 
 class MultiRecurrence:
-    def __init__(self, func_sig, branches):
-        conditions = [branch[0] for branch in branches]
-        self.conditions = Recurrence.make_exclusive_conditions(conditions)
-        self.transitions = [branch[1] for branch in branches]
-        # for the recursive case,
-        # an operation should consists of dictionary of recursive calls
-        # followed by an linear transformation on them,
-        # whose result is the returned value for this case.
-        self.recursive_calls, self.post_ops = self._preprocess_transitions(self.transitions)
-        self.func_sig = func_sig
+    def __init__(self, *args):
+        if isinstance(args[0], list):
+            branches = args[0]
+            conditions = [branch[0] for branch in branches]
+            self._conditions = Recurrence.make_exclusive_conditions(conditions)
+            self._transitions = [branch[1] for branch in branches]
+            # for the recursive case,
+            # an operation should consists of dictionary of recursive calls
+            # followed by an linear transformation on them,
+            # whose result is the returned value for this case.
+            self.recursive_calls, self.post_ops = self._preprocess_transitions(self.transitions)
+            self.func_sig = list(self.transitions[0].keys())[0]
+        else:
+            self.func_sig, self._conditions, self._transitions, self.recursive_calls, self.post_ops = args
+
+    def subs(self, mapping):
+        func_sig = self.func_sig.subs(mapping, simultaneous=True)
+        conditions  = [cond.subs(mapping, simultaneous=True) for cond in self.conditions]
+        transitions = []
+        for transition in self.transitions:
+            transitions.append({k.subs(mapping, simultaneous=True): t.subs(mapping, simultaneous=True) for k, t in transition.items()})
+        recursive_calls = []
+        for call in self.recursive_calls:
+            recursive_calls.append({k: call[k].subs(mapping, simultaneous=True) for k in call})
+        return MultiRecurrence(func_sig, conditions, transitions, recursive_calls, self.post_ops)
+
+    @property
+    def conditions(self):
+        return self._conditions.copy()
+
+    @property
+    def transitions(self):
+        return self._transitions.copy()
 
     def _preprocess_transitions(self, transitions):
         recursive_calls = []
@@ -137,7 +160,6 @@ class MultiRecurrence:
         for f in rec_sym:
             sp.pprint(sp.Eq(f, rec_sym[f]))
             print()
-
 
     def is_nearly_tail(self):
         return all([len(calls) <= 1 for calls in self.recursive_calls])

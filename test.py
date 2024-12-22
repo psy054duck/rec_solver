@@ -17,7 +17,7 @@ def test():
     # s = '''a(0) = 0; b(0) = 1; i(0) = 0; if ((a(n) < 10)) { a(n+1) = a(n) + 10; b(n+1) = b(n) - 1; i(n+1) = i(n) + 1; } else if (a(n) < 11) { a(n+1) = a(n) + 1; b(n + 1) = b(n) + 2; i(n+1) = i(n) + 1; } else {a(n+1) = a(n) - 1; b(n+1) = b(n) - 1; i(n+1) = i(n) + 1; }'''
     s = '''a(0) = a; b(0) = b; if (a(n) < 10) { a(n+1) = a(n) + 1; b(n+1) = b(n) - 1; } else { a(n + 1) = a(n) + 2; b(n + 1) = b(n) - 3; }'''
     # rec1 = parse_str(s)
-    rec1 = parse_file('./examples/test6.txt')
+    rec1 = parse_file('./examples/test7.txt')
     # closed = solve_ultimately_periodic_initial(rec1)
     # closed = solve_ultimately_periodic_symbolic(rec1)
     # closed = poly_expr_solving(rec1, 1)
@@ -89,10 +89,17 @@ def test_rec_sum():
     rec = MultiRecurrence(f(n, m), branches)
     solve_multivariate_rec(rec)
 
+def test_multirec():
+    rec = parse_file('./examples/test8.txt')
+    rec.pprint()
+    solve_multivariate_rec(rec)
+
+
 if __name__ == '__main__':
+    test_multirec()
     # test_parser()
     # test_rec_sum()
-    test()
+    # test()
     # test_get_terms()
     # test_get_exponential_factor()
     # test_compression()

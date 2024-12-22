@@ -5,8 +5,44 @@ from .ultimately_periodic import solve_ultimately_periodic_symbolic
 from .. import utils
 from functools import reduce
 
-def multirec2loop(rec: MultiRecurrence):
-    pass
+def rec2nearly_tail(rec: MultiRecurrence):
+    base_conditions, base_ops = rec.get_base_cases()
+    rec_conditions, rec_calls, rec_ops = rec.get_rec_cases()
+    for cond, calls in zip(rec_conditions, rec_calls):
+        if len(calls) <= 1:
+            continue
+        for name, target_call in calls.items():
+            other_calls = {k: calls[k] for k in calls if k != name}
+            equal_terms = eq_terms(target_call, cond, rec)
+            print(target_call, equal_terms)
+
+
+def eq_terms(target_call, pre_cond, rec: MultiRecurrence):
+    func_sig = rec.func_sig
+    arity = len(func_sig.args)
+    unroll_mapping = {func_sig.args[i]: target_call.args[i] for i in range(arity)}
+    unrolled_rec = rec.subs(unroll_mapping)
+    base_conditions, base_post_ops = unrolled_rec.get_base_cases()
+    rec_conditions, recursive_calls, rec_post_ops = unrolled_rec.get_rec_cases()
+    solver = z3.Solver()
+    for cond, op in zip(base_conditions, base_post_ops):
+        path_cond = pre_cond & cond
+        path_cond_z3 = utils.to_z3(path_cond)
+        res = solver.check(path_cond_z3)
+        if res == z3.sat:
+            res = solver.check(z3.Not(path_cond_z3))
+            if res == z3.unsat:
+                return {op}
+    for cond, calls, op in zip(rec_conditions, recursive_calls, rec_post_ops):
+        path_cond = pre_cond & cond
+        print(path_cond)
+        path_cond_z3 = utils.to_z3(path_cond)
+        res = solver.check(path_cond_z3)
+        if res == z3.sat:
+            res = solver.check(z3.Not(path_cond_z3))
+            if res == z3.unsat:
+                return {op.subs(calls, simultaneous=True)}
+
 
 def solve_nearly_tail(rec: MultiRecurrence):
     assert(rec.is_nearly_tail())
@@ -127,7 +163,11 @@ def symbol2func(sym):
     return sp.Function(sym.name, nargs=1)
 
 def solve_multivariate_rec(rec: MultiRecurrence):
-    closed_form = solve_nearly_tail(rec)
+    if rec.is_nearly_tail():
+        closed_form = solve_nearly_tail(rec)
+    else:
+        rec2nearly_tail(rec)
+        # raise Exception('not a nearly tail recursion')
     # sp.pprint(sp.simplify(closed_form))
     return sp.simplify(closed_form)
 # f(n, M)
