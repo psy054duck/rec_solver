@@ -1,47 +1,127 @@
+import logging
 import sympy as sp
 import z3
 from ..recurrence import MultiRecurrence, Recurrence, LoopRecurrence
 from .ultimately_periodic import solve_ultimately_periodic_symbolic
 from .. import utils
 from functools import reduce
+from collections import defaultdict
+from itertools import product
 
+logger = logging.getLogger(__name__)
 def rec2nearly_tail(rec: MultiRecurrence):
-    base_conditions, base_ops = rec.get_base_cases()
+    pivot_calls = get_pivot_calls(rec)
+    print(pivot_calls)
+
+def get_pivot_calls(rec):
+    '''Pivot calls are those calls in recursive cases whose computations also
+    compute other recursive calls in the same case. This function returns the
+    list of tuple of form (pivot_call, cached_compuation) in the same order of
+    recursive cases stored in rec'''
     rec_conditions, rec_calls, rec_ops = rec.get_rec_cases()
-    for cond, calls in zip(rec_conditions, rec_calls):
+    all_pivot_calls = []
+    for pre_cond, calls in zip(rec_conditions, rec_calls):
         if len(calls) <= 1:
             continue
-        for name, target_call in calls.items():
-            other_calls = {k: calls[k] for k in calls if k != name}
-            equal_terms = eq_terms(target_call, cond, rec)
-            print(target_call, equal_terms)
+        name_terms = {}
+        for name, call in calls.items():
+            equal_terms = eq_terms(call, pre_cond, rec)
+            name_terms[name] = equal_terms
+            name_terms[name].add(call)
+        for name, pivot_call in calls.items():
+            other_names = set(name_terms.keys()) - {name}
+            is_all_computed = True
+            cached_dict = {}
+            for other_name in other_names:
+                redundant_computation = [is_computed(pivot_call, other_call, pre_cond, rec) for other_call in name_terms[other_name]]
+                cached_computations = [r for r in redundant_computation if len(r[0]) != 0 or len(r[1]) != 0]
+                # is_all_redundant = any([(len(r[0]) != 0 or len(r[1]) != 0) for r in redundant_computation])
+                # if all([not is_computed(pivot_call, other_call, pre_cond, rec) for other_call in name_terms[other_name]]):
+                if len(cached_computations) == 0:
+                    is_all_computed = False
+                    break
+                cached_computation = cached_computations[0]
+                cached_dict[other_name] = cached_computation
+            if is_all_computed:
+                all_pivot_calls.append((pivot_call, cached_dict))
+                break
+        else:
+            raise Exception('Not convertible')
+    return all_pivot_calls
 
 
-def eq_terms(target_call, pre_cond, rec: MultiRecurrence):
+def is_computed(pivot_call, other_call, pre_cond, rec):
+    '''Check if in the computation of target_call, other_call is also computed'''
+    unrolled_pivot_call = unroll(pivot_call, rec)
+    unrolled_pivot_call.pprint()
+    unrolled_other_call = unroll(other_call, rec)
+    base_pivot_conditions, _ = unrolled_pivot_call.get_base_cases()
+    base_other_conditions, base_other_post_ops = unrolled_other_call.get_base_cases()
+    total_other_base_cond = reduce(sp.Or, base_other_conditions, sp.false)
+    solver = z3.Solver()
+    # if the pivot call goes into a base case, then other call should also goes into a base case
+    if any([solver.check(utils.to_z3(pre_cond & base_target_cond & sp.Not(total_other_base_cond))) == z3.sat for base_target_cond in base_pivot_conditions]):
+        return [], []
+    base_res = []
+    for base_pivot_cond in base_pivot_conditions:
+        computed = [z3.unsat == solver.check(utils.to_z3(pre_cond & base_pivot_cond & sp.Not(base_other_cond))) for base_other_cond in base_other_conditions]
+        cur_op = [(base_other_post_ops[i], base_other_conditions[i]) for i, c in enumerate(computed) if c]
+        cur_op[-1] = (cur_op[-1][0], sp.true)
+        base_res.append(sp.Piecewise(*cur_op))
+    rec_pivot_conditions, rec_pivot_calls_list, _ = unrolled_pivot_call.get_rec_cases()
+    rec_res = []
+    for rec_pivot_cond, rec_pivot_calls in zip(rec_pivot_conditions, rec_pivot_calls_list):
+        # if the pivot call goes into a recursive case (i), then
+        # (1) if other call goes into a base case, it is okay;
+        # (2) if other call goes in to a recursive case, then it should be equal
+        # to some call in the recursive case (i)
+        name_list = list(rec_pivot_calls.keys())
+        if z3.unsat == solver.check(utils.to_z3(pre_cond & rec_pivot_cond)):
+            rec_res.append({})
+            continue
+        computed = [z3.unsat == solver.check(utils.to_z3(pre_cond & rec_pivot_cond & sp.Not(rec_pivot_calls[name] == other_call))) for name in name_list]
+        if not any(computed):
+            return [], []
+        try:
+            idx = computed.index(True)
+            cur_res = {name_list[idx]}
+            rec_res.append(cur_res)
+        except ValueError:
+            return [], []
+
+        # if all(computed):
+        #     return False
+        
+        # if all([z3.sat == solver.check(utils.to_z3(pre_cond & rec_pivot_cond & sp.Not(rec_pivot_calls[name] == other_call))) for name in rec_pivot_calls]):
+        #     return False
+    return base_res, rec_res
+
+
+def unroll(call, rec):
+    '''unroll the call according to the rec definition'''
     func_sig = rec.func_sig
     arity = len(func_sig.args)
-    unroll_mapping = {func_sig.args[i]: target_call.args[i] for i in range(arity)}
+    unroll_mapping = {func_sig.args[i]: call.args[i] for i in range(arity)}
     unrolled_rec = rec.subs(unroll_mapping)
+    return unrolled_rec
+
+def eq_terms(target_call, pre_cond, rec: MultiRecurrence):
+    unrolled_rec = unroll(target_call, rec)
     base_conditions, base_post_ops = unrolled_rec.get_base_cases()
     rec_conditions, recursive_calls, rec_post_ops = unrolled_rec.get_rec_cases()
     solver = z3.Solver()
     for cond, op in zip(base_conditions, base_post_ops):
-        path_cond = pre_cond & cond
+        path_cond = pre_cond & sp.Not(reduce(sp.Or, base_conditions, sp.false)) & sp.Not(cond)
         path_cond_z3 = utils.to_z3(path_cond)
         res = solver.check(path_cond_z3)
-        if res == z3.sat:
-            res = solver.check(z3.Not(path_cond_z3))
-            if res == z3.unsat:
-                return {op}
+        if res == z3.unsat:
+            return {op}
     for cond, calls, op in zip(rec_conditions, recursive_calls, rec_post_ops):
-        path_cond = pre_cond & cond
-        print(path_cond)
+        path_cond = pre_cond & sp.Not(reduce(sp.Or, base_conditions, sp.false)) & sp.Not(cond)
         path_cond_z3 = utils.to_z3(path_cond)
         res = solver.check(path_cond_z3)
-        if res == z3.sat:
-            res = solver.check(z3.Not(path_cond_z3))
-            if res == z3.unsat:
-                return {op.subs(calls, simultaneous=True)}
+        if res == z3.unsat:
+            return {op.subs(calls, simultaneous=True)} if op in calls else set()
 
 
 def solve_nearly_tail(rec: MultiRecurrence):

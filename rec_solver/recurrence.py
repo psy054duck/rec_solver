@@ -104,14 +104,17 @@ class MultiRecurrence:
             conditions = [branch[0] for branch in branches]
             self._conditions = Recurrence.make_exclusive_conditions(conditions)
             self._transitions = [branch[1] for branch in branches]
+            self.func_sig = list(self.transitions[0].keys())[0]
             # for the recursive case,
             # an operation should consists of dictionary of recursive calls
             # followed by an linear transformation on them,
             # whose result is the returned value for this case.
             self.recursive_calls, self.post_ops = self._preprocess_transitions(self.transitions)
-            self.func_sig = list(self.transitions[0].keys())[0]
         else:
             self.func_sig, self._conditions, self._transitions, self.recursive_calls, self.post_ops = args
+
+    def number_ret(self):
+        return len(self.post_ops[0])
 
     def subs(self, mapping):
         func_sig = self.func_sig.subs(mapping, simultaneous=True)
@@ -138,12 +141,12 @@ class MultiRecurrence:
         for trans in transitions:
             assert(len(trans.keys()) == 1)
             rhs = list(trans.values())[0]
-            func_apps = list(rhs.atoms(AppliedUndef))
+            func_apps = list(rhs.atoms(self.func_sig))
             named_calls = {sp.Symbol('a%d' % i, integer=True): func_apps[i] for i in range(len(func_apps))}
             call_names = {func_apps[i]: sp.Symbol('a%d' % i, integer=True) for i in range(len(func_apps))}
             post_op = rhs.subs(call_names, simultaneous=True)
             recursive_calls.append(named_calls)
-            post_ops.append(post_op)
+            post_ops.append((post_op,))
         return recursive_calls, post_ops
 
     def sympify(self):
@@ -162,7 +165,7 @@ class MultiRecurrence:
             print()
 
     def is_nearly_tail(self):
-        return all([len(calls) <= 1 for calls in self.recursive_calls])
+        return all([len(set(calls.values())) <= 1 for calls in self.recursive_calls])
 
     def get_base_cases(self):
         conditions, _, post_ops = self._get_cases()
@@ -184,6 +187,17 @@ class MultiRecurrence:
                 recursive_calls.append(self.recursive_calls[i])
                 post_ops.append(self.post_ops[i])
         return conditions, recursive_calls, post_ops
+
+    def is_base_condition(self, cond):
+        func_apps = cond.atoms(self.func_sig)
+        return len(func_apps) == 0
+
+    def is_base_transition(self, trans):
+        for f in trans:
+            func_apps = trans[f].atoms(self.func_sig)
+            if len(func_apps) > 0:
+                return False
+        return True
 
 class LoopRecurrence:
     def __init__(self, initial, branches):

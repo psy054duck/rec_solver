@@ -6,6 +6,8 @@ from rec_solver.recurrence import Recurrence, MultiRecurrence
 from rec_solver import utils
 import sympy as sp
 import os
+import logging
+import sys
 
 def test():
     # s = '''a(0) = 0; b(0) = 1; i(0) = 0; if ((a(n) < 10)) { a(n+1) = a(n) + 1; b(n+1) = b(n) - 1; i(n+1) = i(n) + 1; } else {a(n+1) = a(n) - 1; b(n+1) = b(n)*3; i(n+1) = i(n) + 1; }'''
@@ -90,6 +92,7 @@ def test_rec_sum():
     solve_multivariate_rec(rec)
 
 def test_multirec():
+    logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
     rec = parse_file('./examples/test8.txt')
     rec.pprint()
     solve_multivariate_rec(rec)
