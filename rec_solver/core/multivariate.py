@@ -128,29 +128,33 @@ def solve_nearly_tail(rec: MultiRecurrence):
     assert(rec.is_nearly_tail())
     d = sp.Symbol('_d', integer=True)
     D = sp.Symbol('_D', integer=True)
-    ret = sp.Symbol('_ret', integer=True)
-    loop_rec = nearly_tail2loop(rec, d, ret)
+    # ret = sp.Symbol('_ret', integer=True)
+    rets = sp.symbols('_ret:%d' % rec.number_ret())
+    loop_rec = nearly_tail2loop(rec, d, rets)
     loop_guard = get_loop_cond(rec, d)
     loop_closed_form = solve_ultimately_periodic_symbolic(loop_rec)
     loop_closed_form.pprint()
     piecewise_D = compute_piecewise_D(d, D, loop_guard, loop_closed_form)
     scalar_closed_form = loop_closed_form.subs({d: piecewise_D})
     base_conditions, base_post_ops = rec.get_base_cases()
-    branches = []
-    for cond, op in zip(base_conditions, base_post_ops):
-        args = cond.free_symbols | op.free_symbols
+    branches_rets = [[] for _ in range(len(rets))]
+    for cond, ops in zip(base_conditions, base_post_ops):
+        args = cond.free_symbols | reduce(set.union, [op.free_symbols for op in ops])
         symbol2func_mapping = {arg: symbol2func(arg)(d) for arg in args}
-        op_func = op.subs(symbol2func_mapping, simultenoues=True)
+        op_funcs = (op.subs(symbol2func_mapping, simultenoues=True) for op in ops)
         cond_func = cond.subs(symbol2func_mapping, simultaneous=True)
-        op_D = op_func.subs(scalar_closed_form.sympify(), simultaneous=True)
+        ops_D = (op_func.subs(scalar_closed_form.sympify(), simultaneous=True) for op_func in op_funcs)
         cond_D = cond_func.subs(scalar_closed_form.sympify(), simultaneous=True)
-        branches.append((op_D, cond_D))
-    branches[-1] = (branches[-1][0], True)
-    ret0 = sp.piecewise_fold(sp.Piecewise(*branches))
+        for branches, op_D in zip(branches_rets, ops_D):
+            branches.append((op_D, cond_D))
+    for branches in branches_rets:
+        branches[-1] = (branches[-1][0], True)
+    # ret0 = sp.piecewise_fold(sp.Piecewise(*branches))
+    rets0 = [sp.piecewise_fold(sp.Piecewise(*branches)) for branches in branches_rets]
     closed_form_dict = scalar_closed_form.sympify()
-    return sp.piecewise_fold(closed_form_dict[symbol2func(ret)(d)].subs({ret: ret0}))
+    return [sp.piecewise_fold(closed_form_dict[symbol2func(ret)(d)].subs({ret: ret0})) for ret, ret0 in zip(rets, rets0)]
 
-def nearly_tail2loop(rec: MultiRecurrence, d, ret):
+def nearly_tail2loop(rec: MultiRecurrence, d, rets):
     assert(rec.is_nearly_tail())
     # recursive_calls = rec.recursive_calls
     # post_ops = rec.post_ops
@@ -158,7 +162,7 @@ def nearly_tail2loop(rec: MultiRecurrence, d, ret):
     args = func_sig.args
     # d = sp.Symbol('_d', integer=True)
     # ret = sp.Symbol('_ret', integer=True)
-    args_func_map = {arg: symbol2func(arg) for arg in args} | {ret: symbol2func(ret)}
+    args_func_map = {arg: symbol2func(arg) for arg in args} | {ret: symbol2func(ret) for ret in rets}
     # base_conditions, base_post_ops = rec.get_base_cases()
     rec_conditions, recursive_calls, rec_post_ops = rec.get_rec_cases()
     args_func_d = {arg: symbol2func(arg)(d) for arg in args}
@@ -167,13 +171,13 @@ def nearly_tail2loop(rec: MultiRecurrence, d, ret):
     transitions = []
     for i, rec_call in enumerate(recursive_calls):
         args_p = list(rec_call.values())[0].args
-        post_op = rec_post_ops[i]
+        post_ops = rec_post_ops[i]
         transition = {args_func_d_1[arg]: arg_p.subs(args_func_d, simultaneous=True) for arg, arg_p in zip(args, args_p)}
         name_rec = list(rec_call.keys())[0]
-        ret_func = symbol2func(ret)
-        transition |= {ret_func(d + 1): post_op.subs({name_rec: ret_func(d)} | args_func_d, simultaneous=True)}
+        ret_funcs = [symbol2func(ret) for ret in rets]
+        transition |= {ret_func(d + 1): post_op.subs({name_rec: ret_func(d)} | args_func_d, simultaneous=True) for ret_func, post_op in zip(ret_funcs, post_ops)}
         transitions.append(transition)
-    initial = {args_func_map[ret](0): ret} | {symbol2func(arg)(0): arg for arg in args}
+    initial = {args_func_map[ret](0): ret for ret in rets} | {symbol2func(arg)(0): arg for arg in args}
     loop_rec = LoopRecurrence.mk_rec(initial, loop_branch_conditions, transitions)
     return loop_rec
 
@@ -244,12 +248,12 @@ def symbol2func(sym):
 
 def solve_multivariate_rec(rec: MultiRecurrence):
     if rec.is_nearly_tail():
-        closed_form = solve_nearly_tail(rec)
+        closed_forms = solve_nearly_tail(rec)
     else:
         rec2nearly_tail(rec)
         # raise Exception('not a nearly tail recursion')
     # sp.pprint(sp.simplify(closed_form))
-    return sp.simplify(closed_form)
+    return [sp.simplify(closed_form) for closed_form in closed_forms]
 # f(n, M)
 #   if base_1(n): Mb_1
 #   elif base_2(n): Mb_2

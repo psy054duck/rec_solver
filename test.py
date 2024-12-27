@@ -84,12 +84,16 @@ def test_rec_sum():
     conditions = [n <= 0, n > 0]
     # recursive_calls = [{}, {a0: f(n - 1)}]
     # post_ops = [sp.Integer(0), a0 + 1]
+    transitions = [{f(n, m): n + m}, {f(n, m): f(n - 1, m + 1)}]
     recursive_calls = [{}, {a0: f(n - 1, m + 1)}]
-    post_ops = [n + m, a0]
+    post_ops = [(n + m,), (a0,)]
     operations = list(zip(recursive_calls, post_ops))
     branches = list(zip(conditions, operations))
-    rec = MultiRecurrence(f(n, m), branches)
-    solve_multivariate_rec(rec)
+    # rec = MultiRecurrence(branches)
+    rec = MultiRecurrence(f(n, m), conditions, transitions, recursive_calls, post_ops)
+    closed_forms = solve_multivariate_rec(rec)
+    for closed_form in closed_forms:
+        sp.pprint(closed_form)
 
 def test_multirec():
     logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
@@ -99,9 +103,9 @@ def test_multirec():
 
 
 if __name__ == '__main__':
-    test_multirec()
+    # test_multirec()
     # test_parser()
-    # test_rec_sum()
+    test_rec_sum()
     # test()
     # test_get_terms()
     # test_get_exponential_factor()
