@@ -97,6 +97,17 @@ class Recurrence:
         first_arg = first_applied_func.args[0]
         return list(first_arg.free_symbols)[0]
 
+class BaseCase:
+    def __init__(self, condition, op):
+        self.condition = condition
+        self.op = op
+
+class RecursiveCase:
+    def __init__(self, condition, recursive_calls, op):
+        self.condition = condition
+        self.recursive_calls = recursive_calls
+        self.op = op
+
 class MultiRecurrence:
     def __init__(self, *args):
         if isinstance(args[0], list):

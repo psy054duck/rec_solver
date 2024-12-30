@@ -103,9 +103,9 @@ def test_multirec():
 
 
 if __name__ == '__main__':
-    # test_multirec()
+    test_multirec()
     # test_parser()
-    test_rec_sum()
+    # test_rec_sum()
     # test()
     # test_get_terms()
     # test_get_exponential_factor()
