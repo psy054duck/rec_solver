@@ -102,11 +102,26 @@ class BaseCase:
         self.condition = condition
         self.op = op
 
+    def __str__(self):
+        try:
+            [op] = self.op
+        except ValueError:
+            op = self.op
+        '{<50}if {}'.format(op, self.condition)
+
 class RecursiveCase:
     def __init__(self, condition, recursive_calls, op):
         self.condition = condition
         self.recursive_calls = recursive_calls
         self.op = op
+
+    def __str__(self):
+        ops = (op.subs(self.recursive_calls) for op in self.op)
+        try:
+            [op] = ops
+        except ValueError:
+            op = ops
+        '{<50}if {}'.format(self.op, self.condition)
 
 class MultiRecurrence:
     def __init__(self, *args):
@@ -116,14 +131,14 @@ class MultiRecurrence:
             self._conditions = Recurrence.make_exclusive_conditions(conditions)
             self._transitions = [branch[1] for branch in branches]
             self.func_sig = list(self.transitions[0].keys())[0]
-            # for the recursive case,
-            # an operation should consists of dictionary of recursive calls
-            # followed by an linear transformation on them,
-            # whose result is the returned value for this case.
             self.recursive_calls, self.post_ops = self._preprocess_transitions(self.transitions)
         else:
             self.func_sig, self._conditions, self._transitions, self.recursive_calls, self.post_ops = args
-
+        base_conditions, _, ops = self._get_cases(True)
+        self.base_cases = [BaseCase(cond, op) for cond, op in zip(base_conditions, ops)]
+        rec_conditions, recursive_calls, ops = self._get_cases(False)
+        self.recursive_cases = [RecursiveCase(cond, call, op) for cond, call, op in zip(rec_conditions, recursive_calls, ops)]
+        
     def number_ret(self):
         return len(self.post_ops[0])
 
@@ -161,29 +176,47 @@ class MultiRecurrence:
         return recursive_calls, post_ops
 
     def sympify(self):
-        exp = defaultdict(list)
-        for cond, trans in zip(self.conditions, self.transitions):
-            for f in trans:
-                exp[f].append((trans[f], cond))
-        return {f: sp.Piecewise(*exp[f]) for f in exp}
-
+        # exp = defaultdict(list)
+        pieces = []
+        for case in self.get_base_cases():
+            cond = case.condition
+            try:
+                [op] = case.op
+            except ValueError:
+                op = case.op
+            pieces.append((op, cond))
+        for case in self.get_rec_cases():
+            cond = case.condition
+            rec_calls = case.recursive_calls
+            ops = tuple(op.subs(rec_calls, simultaneous=True) for op in case.op)
+            try:
+                [op] = ops
+            except ValueError:
+                op = ops
+            pieces.append((op, cond))
+        pieces[-1] = (pieces[-1][0], True)
+        return sp.Piecewise(*pieces)
 
     def pprint(self):
         sp.init_printing()
         rec_sym = self.sympify()
-        for f in rec_sym:
-            sp.pprint(sp.Eq(f, rec_sym[f]))
-            print()
+        sp.pprint(sp.Eq(self.func_sig, rec_sym))
+        print()
+        # for f in rec_sym:
+        #     sp.pprint(sp.Eq(f, rec_sym[f]))
+        #     print()
 
     def is_nearly_tail(self):
         return all([len(set(calls.values())) <= 1 for calls in self.recursive_calls])
 
     def get_base_cases(self):
-        conditions, _, post_ops = self._get_cases()
-        return conditions, post_ops
+        return self.base_cases.copy()
+        # conditions, _, post_ops = self._get_cases()
+        # return conditions, post_ops
 
     def get_rec_cases(self):
-        return self._get_cases(False)
+        # return self._get_cases(False)
+        return self.recursive_cases.copy()
 
     def _get_cases(self, is_base=True):
         p = lambda calls: len(calls) == 0
