@@ -102,6 +102,11 @@ class BaseCase:
         self.condition = condition
         self.op = op
 
+    def subs(self, mapping):
+        condition = self.condition.subs(mapping, simultaneous=True)
+        ops = tuple(op.subs(mapping, simultaneous=True) for op in self.op)
+        return BaseCase(condition, ops)
+
     def __str__(self):
         try:
             [op] = self.op
@@ -114,6 +119,16 @@ class RecursiveCase:
         self.condition = condition
         self.recursive_calls = recursive_calls
         self.op = op
+
+    def subs(self, mapping):
+        condition = self.condition.subs(mapping, simultaneous=True)
+        recursive_calls = {name: self.recursive_calls[name].subs(mapping, simultaneous=True) for name in self.recursive_calls}
+        ops = tuple(op.subs(mapping, simultaneous=True) for op in self.op)
+        return RecursiveCase(condition, recursive_calls, ops)
+
+    def is_tail(self):
+        return len(set(self.recursive_calls)) <= 1
+
 
     def __str__(self):
         ops = (op.subs(self.recursive_calls) for op in self.op)
@@ -129,37 +144,62 @@ class MultiRecurrence:
             branches = args[0]
             conditions = [branch[0] for branch in branches]
             self._conditions = Recurrence.make_exclusive_conditions(conditions)
-            self._transitions = [branch[1] for branch in branches]
-            self.func_sig = list(self.transitions[0].keys())[0]
-            self.recursive_calls, self.post_ops = self._preprocess_transitions(self.transitions)
+            transitions = [branch[1] for branch in branches]
+            self.func_sig = list(transitions[0].keys())[0]
+            self._recursive_calls, self._post_ops = self._preprocess_transitions(transitions)
+        elif len(args) == 3:
+            self.func_sig = args[0]
+            self._base_cases = args[1]
+            self._recursive_cases = args[2]
+            return
         else:
-            self.func_sig, self._conditions, self._transitions, self.recursive_calls, self.post_ops = args
+            self.func_sig, self._conditions, self._transitions, self._recursive_calls, self._post_ops = args
         base_conditions, _, ops = self._get_cases(True)
-        self.base_cases = [BaseCase(cond, op) for cond, op in zip(base_conditions, ops)]
+        self._base_cases = [BaseCase(cond, op) for cond, op in zip(base_conditions, ops)]
         rec_conditions, recursive_calls, ops = self._get_cases(False)
-        self.recursive_cases = [RecursiveCase(cond, call, op) for cond, call, op in zip(rec_conditions, recursive_calls, ops)]
-        
+        self._recursive_cases = [RecursiveCase(cond, call, op) for cond, call, op in zip(rec_conditions, recursive_calls, ops)]
+
     def number_ret(self):
-        return len(self.post_ops[0])
+        any_case = self.get_base_cases()[0]
+        return len(any_case.op)
 
     def subs(self, mapping):
         func_sig = self.func_sig.subs(mapping, simultaneous=True)
-        conditions  = [cond.subs(mapping, simultaneous=True) for cond in self.conditions]
-        transitions = []
-        for transition in self.transitions:
-            transitions.append({k.subs(mapping, simultaneous=True): t.subs(mapping, simultaneous=True) for k, t in transition.items()})
-        recursive_calls = []
-        for call in self.recursive_calls:
-            recursive_calls.append({k: call[k].subs(mapping, simultaneous=True) for k in call})
-        return MultiRecurrence(func_sig, conditions, transitions, recursive_calls, self.post_ops)
-
-    @property
-    def conditions(self):
-        return self._conditions.copy()
+        # conditions  = [cond.subs(mapping, simultaneous=True) for cond in self.conditions]
+        # transitions = []
+        # for transition in self.transitions:
+        #     transitions.append({k.subs(mapping, simultaneous=True): tuple(op.subs(mapping, simultaneous=True) for op in t) for k, t in transition.items()})
+        # recursive_calls = []
+        # for call in self.recursive_calls:
+        #     recursive_calls.append({k: call[k].subs(mapping, simultaneous=True) for k in call})
+        # return MultiRecurrence(func_sig, conditions, transitions, recursive_calls, self.post_ops)
+        base_cases = []
+        recursive_cases = []
+        for case in self.get_base_cases():
+            base_cases.append(case.subs(mapping))
+        for case in self.get_rec_cases():
+            recursive_cases.append(case.subs(mapping))
+        return MultiRecurrence(func_sig, base_cases, recursive_cases)
 
     @property
     def transitions(self):
-        return self._transitions.copy()
+        transitions = []
+        for case in self.base_cases:
+            transitions.append({self.func_sig: case.op})
+        for case in self.recursive_cases:
+            op = tuple(op.subs(case.recursive_calls, simultaneous=True) for op in case.op)
+            transitions.append({self.func_sig: op})
+        return transitions
+
+    @property
+    def conditions(self):
+        # return self._conditions.copy()
+        conditions = [case.condition for case in self.base_cases + self.recursive_cases]
+        return conditions
+
+    # @property
+    # def transitions(self):
+    #     return self._transitions.copy()
 
     def _preprocess_transitions(self, transitions):
         recursive_calls = []
@@ -188,7 +228,8 @@ class MultiRecurrence:
         for case in self.get_rec_cases():
             cond = case.condition
             rec_calls = case.recursive_calls
-            ops = tuple(op.subs(rec_calls, simultaneous=True) for op in case.op)
+            # ops = tuple(op.subs(rec_calls, simultaneous=True) for op in case.op)
+            ops = case.op
             try:
                 [op] = ops
             except ValueError:
@@ -207,29 +248,31 @@ class MultiRecurrence:
         #     print()
 
     def is_nearly_tail(self):
-        return all([len(set(calls.values())) <= 1 for calls in self.recursive_calls])
+        # return all([len(set(calls.values())) <= 1 for calls in self.recursive_calls])
+        return all([len(set(case.recursive_calls.values())) <= 1 for case in self.get_rec_cases()])
 
     def get_base_cases(self):
-        return self.base_cases.copy()
+        return self._base_cases.copy()
         # conditions, _, post_ops = self._get_cases()
         # return conditions, post_ops
 
     def get_rec_cases(self):
         # return self._get_cases(False)
-        return self.recursive_cases.copy()
+        return self._recursive_cases.copy()
 
     def _get_cases(self, is_base=True):
+        '''Should be invoked only in __init__'''
         p = lambda calls: len(calls) == 0
         if not is_base:
              p = lambda calls: len(calls) > 0
         conditions = []
         recursive_calls = []
         post_ops = []
-        for i, rec_calls in enumerate(self.recursive_calls):
+        for i, rec_calls in enumerate(self._recursive_calls):
             if p(rec_calls):
-                conditions.append(self.conditions[i])
-                recursive_calls.append(self.recursive_calls[i])
-                post_ops.append(self.post_ops[i])
+                conditions.append(self._conditions[i])
+                recursive_calls.append(self._recursive_calls[i])
+                post_ops.append(self._post_ops[i])
         return conditions, recursive_calls, post_ops
 
     def is_base_condition(self, cond):
