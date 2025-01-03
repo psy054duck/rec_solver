@@ -23,7 +23,7 @@ def solve_solvable_map_for_component(rec: Recurrence, component):
         linear, other = utils.split_linear_others(expr, ordered_component, rec.ind_var)
         linear_parts.append(linear)
         other_parts.append(other)
-    linear_matrix_form, _ = sp.linear_eq_to_matrix(linear, ordered_component)
+    linear_matrix_form, _ = sp.linear_eq_to_matrix(linear_parts, ordered_component)
     matrix_eigenvals = linear_matrix_form.eigenvals()
     base_multiplicity_other_part = [utils.get_exponential_base_and_multiplicity(other, rec.ind_var) for other in other_parts]
     all_bases = set(matrix_eigenvals) | reduce(set.union, (set(base_mul.keys()) for base_mul in base_multiplicity_other_part), set())
@@ -62,7 +62,8 @@ def gen_exponential_polynomials_template(bases_multi_dict, ind_var):
     return template, unknowns
 
 def gen_polynomial_template_for_degree(ind_var, degr, name=""):
-    coeffs = sp.symbols('_%s_c:%d' % (name, degr + 1))
+    # coeffs = sp.symbols('_%s_c:%d' % (name, degr + 1))
+    coeffs = [sp.Symbol('_%s_c%d' % (name, i)) for i in range(degr + 1)]
     template = sum([c*ind_var**i for i, c in enumerate(coeffs)])
     return template, list(coeffs)
 

@@ -96,13 +96,33 @@ def test_rec_sum():
         sp.pprint(closed_form)
 
 def test_multirec():
-    logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+    # logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
     rec = parse_file('./examples/test8.txt')
     rec.pprint()
-    solve_multivariate_rec(rec)
+    closed_forms = solve_multivariate_rec(rec)
+    n = sp.Symbol('n', integer=True)
+    u = sp.Symbol('u', integer=True)
+    for closed_form in closed_forms:
+        sp.pprint(closed_form.subs({n: 10, u: 0}))
+        sp.pprint(closed_form.subs({n: 10, u: 1}))
+        sp.pprint(closed_form.subs({n: 10, u: 2}))
+        sp.pprint(closed_form.subs({n: 10, u: 3}))
+
+def test_fib_single():
+    rec = parse_file('./examples/test10.txt')
+    # rec.pprint()
+    closed = solve_ultimately_periodic_symbolic(rec)
+    a = sp.Symbol('a', integer=True)
+    b = sp.Symbol('b', integer=True)
+    n = sp.Symbol('n', integer=True)
+    fib = closed.subs({a: 1, b: 0})
+    for i in range(10):
+        fib.subs({n: i}).pprint()
+    closed.pprint()
 
 
 if __name__ == '__main__':
+    # test_fib_single()
     test_multirec()
     # test_parser()
     # test_rec_sum()

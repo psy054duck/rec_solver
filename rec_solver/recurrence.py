@@ -9,9 +9,11 @@ class Recurrence:
         base_conditions, base_transitions, recursive_conditions, recursive_transitions = Recurrence.divide_to_base_and_recursive(branches)
         if Recurrence.is_loop_recurrence(branches):
             ind_var = Recurrence.get_possible_ind_var(recursive_transitions)
-            assert(len(base_transitions) == 1)
-            base_transition = base_transitions[0]
-            initial = {f.subs({ind_var: 0}, simultaneous=True): base_transition[f] for f in base_transition}
+            # assert(len(base_transitions) == 1)
+            # base_transition = base_transitions[0]
+            random_rec_case = recursive_transitions[0]
+            # initial = {f.subs({ind_var: 0}, simultaneous=True): base_transition[f] for f in base_transition}
+            initial = {f.subs({ind_var: -1}, simultaneous=True): sp.Symbol(f.name, integer=True) for f in random_rec_case}
             new_branches = list(zip(recursive_conditions, recursive_transitions))
             return LoopRecurrence(initial, new_branches)
         else:
@@ -351,8 +353,6 @@ class LoopRecurrence:
     def copy_rec_with_diff_initial(self, new_initial):
         branches = list(zip(self.conditions, self.transitions))
         return LoopRecurrence(new_initial, branches)
-
-
 
     def get_n_values_starts_with(self, start, n):
         first_values, index_seq = self.get_first_n_values(start + n)

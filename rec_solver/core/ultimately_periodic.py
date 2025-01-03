@@ -1,4 +1,5 @@
 import sympy as sp
+from sympy.core.function import AppliedUndef
 import logging
 # import cvc5.pythonic as z3
 import z3
@@ -95,6 +96,8 @@ def verify(rec: Recurrence, candidate_sol: PiecewiseClosedForm, pattern: list):
     smallest = sp.oo
     for r, i in enumerate(periodic_index_seq):
         cond = conditions[i]
+        if cond == sp.true:
+            continue
         cond = cond.subs(last_closed_form.get_rth_part_closed_form(r), simultaneous=True)
         cond = cond.subs({candidate_sol.ind_var: period*k + r}, simultaneous=True)
         cond_range = cond.as_set()
@@ -184,7 +187,11 @@ def _set_up_constraints(rec: Recurrence, closed_form: PiecewiseClosedForm, index
         closed_form_component = closed_form.closed_forms[i]
         period = closed_form_component.period
         for r, j in enumerate(seq):
-            closed_form_z3 = closed_form_component.to_z3()
+            if rec.conditions[j] == sp.true:
+                continue
+            # closed_form_z3 = closed_form_component.to_z3()
+            mentioned_vars = rec.conditions[j].atoms(AppliedUndef)
+            closed_form_z3 = closed_form_component.selected_to_z3(mentioned_vars)
             mapping = [(k, v) for k, v in closed_form_z3.items()]
             condition = z3.substitute(rec_conditions[j], *mapping)
             cur_constraint = z3.Implies(premise, condition)

@@ -47,11 +47,26 @@ class PeriodicClosedForm:
     def get_rth_part_closed_form(self, r):
         return self._closed_form_list[r]
 
+    # def to_z3(self):
+    #     ind_var_z3 = utils.to_z3(self.ind_var)
+    #     closed_form_z3_list = [self._to_z3(closed) for closed in self._closed_form_list]
+    #     res = {}
+    #     for var in self.all_vars:
+    #         var_z3 = utils.to_z3(var)
+    #         expr_z3 = closed_form_z3_list[-1][var_z3]
+    #         for i, closed in enumerate(closed_form_z3_list[:-1]):
+    #             expr_z3 = z3.If(ind_var_z3 % self.period == i, closed[var_z3], expr_z3)
+    #         res[var_z3] = z3.simplify(expr_z3)
+    #     return res
+
     def to_z3(self):
+        return self.selected_to_z3(self.all_vars)
+
+    def selected_to_z3(self, vars):
         ind_var_z3 = utils.to_z3(self.ind_var)
-        closed_form_z3_list = [self._to_z3(closed) for closed in self._closed_form_list]
+        closed_form_z3_list = [self._to_z3(closed, vars) for closed in self._closed_form_list]
         res = {}
-        for var in self.all_vars:
+        for var in vars:
             var_z3 = utils.to_z3(var)
             expr_z3 = closed_form_z3_list[-1][var_z3]
             for i, closed in enumerate(closed_form_z3_list[:-1]):
@@ -59,9 +74,11 @@ class PeriodicClosedForm:
             res[var_z3] = z3.simplify(expr_z3)
         return res
 
-    def _to_z3(self, closed):
+
+    def _to_z3(self, closed, vars):
         res = {}
-        for k, c in closed.items():
+        for k in vars:
+            c = closed[k]
             k_z3 = utils.to_z3(k)
             c_z3 = utils.to_z3(c)
             res[k_z3] = c_z3
@@ -116,6 +133,13 @@ class PiecewiseClosedForm:
             for f in sp_closed:
                 expressions[f].append((sp_closed[f], cond))
         return {f: sp.Piecewise(*expressions[f]) for f in expressions}
+
+    def pprint(self):
+        sp.init_printing()
+        sp_dict = self.sympify()
+        for f in sp_dict:
+            sp.pprint(sp.simplify(sp.Eq(f, sp_dict[f])))
+            print()
 
     def subs(self, mapping):
         conditions = [c.subs(mapping, simultaneous=True) for c in self.conditions]
