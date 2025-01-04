@@ -16,30 +16,11 @@ class PivotCall:
         self.case = case
         self.pivot_call_name = pivot_call_name
         self.cached_computation = cached_computation
+        self.rec = rec
 
-    def gen_cached_op(self):
-        '''Generate vectorized recursive case for this pivot call'''
-        # pre_cond = self.case.condition
-        # func_sig = self.case.recursive_calls[self.pivot_call_name]
-        # new_rec_calls = {self.pivot_call_name: func_sig}
-        base_res = []
-        rec_res = []
-        for cached_call_name in self.cached_computation:
-            base_cached, rec_cached = self.cached_computation[cached_call_name]
-            for i, cached in enumerate(base_cached):
-                # if some path is infeasible, dummy value is inserted
-                op = cached if len(cached) != 0 else (sp.Integer(0),)
-                try:
-                    base_res[i] = base_res[i] + op
-                except IndexError:
-                    base_res.append(op)
-            for i, cached in enumerate(rec_cached):
-                op = cached if len(cached) != 0 else (sp.Integer(0),)
-                try:
-                    rec_res[i] = rec_res[i] + op
-                except IndexError:
-                    rec_res.append(op)
-        return base_res, rec_res
+    @property
+    def num_cached_values(self):
+        return self.case.num_rec_calls - 1
 
     def get_pivot_func(self):
         return self.case.recursive_calls[self.pivot_call_name]
@@ -69,13 +50,21 @@ def rec2nearly_tail(rec: MultiRecurrence):
 
     for i, cached in enumerate(rec_cached):
         # new_rec_cases[i].recursive_calls = {pivot_calls[i].pivot_call_name: all_pivot_func[i]}
-        new_rec_cases[i].op = new_rec_cases[i].op + cached
+        call = pivot_calls[i]
+        cached_names = get_ret_names(pivot_calls, i)
+        case = pivot_calls[i].case
+        ori_names = [name for name in case.recursive_calls.keys() if name != call.pivot_call_name]
+        mapping = {ori_name: cached_name for ori_name, cached_name in zip(ori_names, cached_names)}
+        op = tuple(o.subs(mapping, simultaneous=True) for o in new_rec_cases[i].op)
+        new_rec_cases[i].op = op + cached
 
+    cached_names = sum([get_ret_names(pivot_calls, i) for i in range(len(pivot_calls))], [])
+    names = [sp.Symbol('_a0', integer=True)] + cached_names
     for i, pivot_call in enumerate(pivot_calls):
         old_recursive_calls = ori_rec_cases[i].recursive_calls
         new_func = func_p(*pivot_call.get_pivot_func().args)
         # The pivot call should be put as the first element
-        names = [pivot_call.pivot_call_name] + [name for name in old_recursive_calls if name != pivot_call.pivot_call_name]
+        # names = [pivot_call.pivot_call_name] + [name for name in old_recursive_calls if name != pivot_call.pivot_call_name]
         new_rec_cases[i].recursive_calls = {name: new_func for name in names}
     new_rec = MultiRecurrence(new_func_sig, new_base_cases, new_rec_cases)
     return new_rec
@@ -88,15 +77,54 @@ def refine_cached_computation_one_rec_case(pivot_call, rec_cond, rec_call, post_
 
 def gen_cached_ops(pivot_calls: list[PivotCall]):
     first_pivot_call = pivot_calls[0]
-    base_cached, rec_cached = first_pivot_call.gen_cached_op()
-    for pivot_call in pivot_calls[1:]:
-        cur_base, cur_rec = pivot_call.gen_cached_op()
+    # base_cached, rec_cached = first_pivot_call.gen_cached_op()
+    base_cached, rec_cached = gen_cached_op(pivot_calls, 0)
+    for i, pivot_call in enumerate(pivot_calls[1:], 1):
+        # cur_base, cur_rec = pivot_call.gen_cached_op()
+        cur_base, cur_rec = gen_cached_op(pivot_calls, i)
         for i, cached in enumerate(cur_base):
             base_cached[i] = base_cached[i] + cached
         for i, cached in enumerate(cur_rec):
             rec_cached[i] = rec_cached[i] + cached
     return base_cached, rec_cached
 
+def get_ret_names(pivot_calls: list[PivotCall], i):
+    num_prev_cached_values = sum(c.num_cached_values for c in pivot_calls[:i])
+    call = pivot_calls[i]
+    # plus one, because the first returned value is the original returned value
+    # and is not counted as cached values
+    call_names = sp.symbols('_a%d:%d' % (num_prev_cached_values + 1, num_prev_cached_values + 1 + call.num_cached_values))
+    return list(call_names)
+
+def gen_cached_op(pivot_calls: list[PivotCall], i):
+        '''Generate vectorized recursive case for the ith pivot call'''
+        call = pivot_calls[i]
+        base_res = []
+        rec_res = []
+        ret_names = get_ret_names(pivot_calls, i)
+        for cached_call_name in call.cached_computation:
+            base_cached, rec_cached = call.cached_computation[cached_call_name]
+            for i, cached in enumerate(base_cached):
+                # if some path is infeasible, the value remains unchanged
+                # op = cached if len(cached) != 0 else (sp.Integer(0),)
+                op = cached if len(cached) != 0 else tuple(ret_names)
+                try:
+                    base_res[i] = base_res[i] + op
+                except IndexError:
+                    base_res.append(op)
+            for i, cached in enumerate(rec_cached):
+                op = cached if len(cached) != 0 else tuple(ret_names)
+                try:
+                    rec_res[i] = rec_res[i] + op
+                except IndexError:
+                    rec_res.append(op)
+        return base_res, rec_res
+
+def possible_arity(rec: MultiRecurrence):
+    arity = 1
+    for case in rec.get_rec_cases():
+        arity *= len(case.recursive_calls)
+    return arity
 
 def get_pivot_calls(rec: MultiRecurrence) -> list[PivotCall]:
     '''Pivot calls are those calls in recursive cases whose computations also
@@ -107,10 +135,13 @@ def get_pivot_calls(rec: MultiRecurrence) -> list[PivotCall]:
     rec_cases = rec.get_rec_cases()
     all_pivot_calls = []
     # for pre_cond, calls in zip(rec_conditions, rec_calls):
+    # arity = possible_arity(rec)
     for rec_case in rec_cases:
         pre_cond = rec_case.condition
         calls = rec_case.recursive_calls
         if rec_case.is_tail():
+            pivot_name = list(rec_case.recursive_calls.keys())[0]
+            # names = [name for name in sp.symbols('_a:%d' % arity) if name != pivot_name]
             all_pivot_calls.append(PivotCall(rec, rec_case, list(rec_case.recursive_calls.keys())[0], {}))
             continue
         # if len(calls) <= 1:
@@ -233,19 +264,20 @@ def solve_nearly_tail(rec: MultiRecurrence):
     loop_rec = nearly_tail2loop(rec, d, rets)
     loop_rec.pprint()
     n, u = sp.symbols('n u', integer=True)
-    test_loop_rec = loop_rec.subs({n: 10, u: 0})
+    test_loop_rec = loop_rec.subs({n: 5, u: 0})
     print(test_loop_rec.get_first_n_values(10))
-    test_loop_rec = loop_rec.subs({n: 10, u: 1})
+    test_loop_rec = loop_rec.subs({n: 5, u: 1})
     print(test_loop_rec.get_first_n_values(10))
-    test_loop_rec = loop_rec.subs({n: 10, u: 2})
+    test_loop_rec = loop_rec.subs({n: 5, u: 2})
     print(test_loop_rec.get_first_n_values(10))
-    test_loop_rec = loop_rec.subs({n: 10, u: 3})
+    test_loop_rec = loop_rec.subs({n: 5, u: 3})
     print(test_loop_rec.get_first_n_values(10))
     # exit(0)
     loop_guard = get_loop_cond(rec, d)
     loop_closed_form = solve_ultimately_periodic_symbolic(loop_rec)
     # loop_closed_form.pprint()
     piecewise_D = compute_piecewise_D(d, D, loop_guard, loop_closed_form)
+    sp.pprint(piecewise_D)
     scalar_closed_form = loop_closed_form.subs({d: piecewise_D})
     # base_conditions, base_post_ops = rec.get_base_cases()
     branches_rets = [[] for _ in range(len(rets))]

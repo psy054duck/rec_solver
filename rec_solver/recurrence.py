@@ -131,6 +131,9 @@ class RecursiveCase:
     def is_tail(self):
         return len(set(self.recursive_calls)) <= 1
 
+    @property
+    def num_rec_calls(self):
+        return len(self.recursive_calls)
 
     def __str__(self):
         ops = (op.subs(self.recursive_calls) for op in self.op)
@@ -210,8 +213,8 @@ class MultiRecurrence:
             assert(len(trans.keys()) == 1)
             rhs = list(trans.values())[0]
             func_apps = list(rhs.atoms(self.func_sig))
-            named_calls = {sp.Symbol('a%d' % i, integer=True): func_apps[i] for i in range(len(func_apps))}
-            call_names = {func_apps[i]: sp.Symbol('a%d' % i, integer=True) for i in range(len(func_apps))}
+            named_calls = {sp.Symbol('_a%d' % i, integer=True): func_apps[i] for i in range(len(func_apps))}
+            call_names = {func_apps[i]: sp.Symbol('_a%d' % i, integer=True) for i in range(len(func_apps))}
             post_op = rhs.subs(call_names, simultaneous=True)
             recursive_calls.append(named_calls)
             post_ops.append((post_op,))
