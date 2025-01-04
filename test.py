@@ -8,6 +8,7 @@ import sympy as sp
 import os
 import logging
 import sys
+import z3
 
 def test():
     # s = '''a(0) = 0; b(0) = 1; i(0) = 0; if ((a(n) < 10)) { a(n+1) = a(n) + 1; b(n+1) = b(n) - 1; i(n+1) = i(n) + 1; } else {a(n+1) = a(n) - 1; b(n+1) = b(n)*3; i(n+1) = i(n) + 1; }'''
@@ -102,11 +103,19 @@ def test_multirec():
     closed_forms = solve_multivariate_rec(rec)
     n = sp.Symbol('n', integer=True)
     u = sp.Symbol('u', integer=True)
-    for closed_form in closed_forms:
-        sp.pprint(closed_form.subs({n: 10, u: 0}))
-        sp.pprint(closed_form.subs({n: 10, u: 1}))
-        sp.pprint(closed_form.subs({n: 10, u: 2}))
-        sp.pprint(closed_form.subs({n: 10, u: 3}))
+    g = sp.Function('g', nargs=1)
+    initial = {g(0): 0, g(1): 1}
+    closed_form = closed_forms[0]
+    # for closed_form in closed_forms:
+    initialized_closed_form = sp.simplify(closed_form.subs(initial, simultaneous=True))
+    sp.pprint(initialized_closed_form)
+    sp.pprint(sp.simplify(initialized_closed_form.subs({n: 10, u: 0}, simultaneous=True)))
+    sp.pprint(sp.simplify(initialized_closed_form.subs({n: 10, u: 1}, simultaneous=True)))
+    sp.pprint(sp.simplify(initialized_closed_form.subs({n: 10, u: 2}, simultaneous=True)))
+    sp.pprint(sp.simplify(initialized_closed_form.subs({n: 10, u: 3}, simultaneous=True)))
+    sp.pprint(sp.simplify(initialized_closed_form.subs({n: 10, u: 4}, simultaneous=True)))
+    sp.pprint(sp.simplify(initialized_closed_form.subs({n: 10, u: 5}, simultaneous=True)))
+    sp.pprint(sp.simplify(initialized_closed_form.subs({n: 10, u: 15}, simultaneous=True)))
 
 def test_fib_single():
     rec = parse_file('./examples/test10.txt')

@@ -7,7 +7,7 @@ import z3
 # import cvc5.pythonic as z3
 
 def to_sympy(s_z3):
-    s = str(s_z3)
+    s = str(z3.simplify(s_z3, eq2ineq=True))
     expr = sp.parse_expr(s)
     if expr is True:
         return sp.true
