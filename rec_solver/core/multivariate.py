@@ -68,7 +68,7 @@ def rec2nearly_tail(rec: MultiRecurrence):
         # names = [pivot_call.pivot_call_name] + [name for name in old_recursive_calls if name != pivot_call.pivot_call_name]
         new_rec_cases[i].recursive_calls = {name: new_func for name in names}
     new_rec = MultiRecurrence(new_func_sig, new_base_cases, new_rec_cases)
-    new_rec.pprint()
+    # new_rec.pprint()
     return new_rec
 
 def gen_cached_ops(pivot_calls: list[PivotCall]):
@@ -310,7 +310,7 @@ def solve_nearly_tail(rec: MultiRecurrence):
     # ret = sp.Symbol('_ret', integer=True)
     rets = sp.symbols('_ret:%d' % rec.number_ret(), integer=True)
     loop_rec = nearly_tail2loop(rec, d, rets)
-    loop_rec.pprint()
+    # loop_rec.pprint()
     # n, u = sp.symbols('n u', integer=True)
     # test_loop_rec = loop_rec.subs({n: 5, u: 0})
     # print(test_loop_rec.get_first_n_values(10))
@@ -325,7 +325,7 @@ def solve_nearly_tail(rec: MultiRecurrence):
     loop_closed_form = solve_ultimately_periodic_symbolic(loop_rec)
     # loop_closed_form.pprint()
     piecewise_D = compute_piecewise_D(d, D, loop_guard, loop_closed_form)
-    sp.pprint(piecewise_D)
+    # sp.pprint(piecewise_D)
     scalar_closed_form = loop_closed_form.subs({d: piecewise_D})
     # base_conditions, base_post_ops = rec.get_base_cases()
     branches_rets = [[] for _ in range(len(rets))]
@@ -399,7 +399,7 @@ def compute_piecewise_D(d, D, loop_cond, loop_closed_form):
     D_z3 = utils.to_z3(D)
     branches = []
     for case, closed in zip(loop_closed_form.cases, loop_closed_form.closed_forms):
-        sp.pprint(closed.sympify())
+        # sp.pprint(closed.sympify())
         terminate_cond = loop_cond.subs(closed.sympify(), simultaneous=True)
         terminate_cond = sp.piecewise_exclusive(sp.piecewise_fold(terminate_cond), skip_nan=True)
         sp_case = utils.to_sympy(case)
@@ -458,7 +458,8 @@ def solve_multivariate_rec(rec: MultiRecurrence):
         closed_forms = solve_nearly_tail(new_rec)
         # raise Exception('not a nearly tail recursion')
     # sp.pprint(sp.simplify(closed_form))
-    return [sp.simplify(closed_form) for closed_form in closed_forms]
+    # return [sp.simplify(closed_form) for closed_form in closed_forms]
+    return sp.simplify(closed_forms[0])
 # f(n, M)
 #   if base_1(n): Mb_1
 #   elif base_2(n): Mb_2

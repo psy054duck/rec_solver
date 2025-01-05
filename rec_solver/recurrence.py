@@ -9,10 +9,7 @@ class Recurrence:
         base_conditions, base_transitions, recursive_conditions, recursive_transitions = Recurrence.divide_to_base_and_recursive(branches)
         if Recurrence.is_loop_recurrence(branches):
             ind_var = Recurrence.get_possible_ind_var(recursive_transitions)
-            # assert(len(base_transitions) == 1)
-            # base_transition = base_transitions[0]
             random_rec_case = recursive_transitions[0]
-            # initial = {f.subs({ind_var: 0}, simultaneous=True): base_transition[f] for f in base_transition}
             initial = {f.subs({ind_var: -1}, simultaneous=True): sp.Symbol(f.name, integer=True) for f in random_rec_case}
             new_branches = list(zip(recursive_conditions, recursive_transitions))
             return LoopRecurrence(initial, new_branches)
@@ -20,6 +17,17 @@ class Recurrence:
             random_rec_case = recursive_transitions[0]
             func_sig = list(random_rec_case.keys())[0]
             return MultiRecurrence(branches)
+
+    @staticmethod
+    def mk_loop_recurrence(initial, branches):
+        assert(Recurrence.is_loop_recurrence(branches))
+        _, _, recursive_conditions, recursive_transitions = Recurrence.divide_to_base_and_recursive(branches)
+        ind_var = Recurrence.get_possible_ind_var(recursive_transitions)
+        random_rec_case = recursive_transitions[0]
+        initial = {f.subs({ind_var: -1}, simultaneous=True): sp.Symbol(f.name, integer=True) for f in random_rec_case} | initial
+        new_branches = list(zip(recursive_conditions, recursive_transitions))
+        return LoopRecurrence(initial, new_branches)
+
 
     @staticmethod
     def divide_to_base_and_recursive(branches):
@@ -50,10 +58,8 @@ class Recurrence:
         transitions = [branch[1] for branch in branches]
         for cond, trans in zip(conditions, transitions):
             applied_func = cond.atoms(AppliedUndef)
-            # applied_func |= reduce(set.union, [set(trans.keys()) | set(trans.values()) for trans in trans])
             applied_func |= reduce(set.union, [e.atoms(AppliedUndef) for e in trans.keys()])
             applied_func |= reduce(set.union, [e.atoms(AppliedUndef) for e in trans.values()])
-            # applied_func |= set(trans.keys()) | set(trans.values())
             # check if all functions are univariate
             if not all([list(f.nargs)[0] == 1 for f in applied_func]):
                 return False

@@ -4,13 +4,16 @@ import sympy as sp
 from ..recurrence import Recurrence
 
 def p_recurrence(p):
-    '''recurrence : if'''
+    '''recurrence : initialization if'''
     # p[0] = Recurrence(p[1], p[2])
-    p[0] = Recurrence(p[1])
+    if len(p[1]) == 0:
+        p[0] = Recurrence(p[2])
+    else:
+        p[0] = Recurrence.mk_loop_recurrence(p[1], p[2])
 
-# def p_initialization(p):
-#     '''initialization : assignments'''
-#     p[0] = p[1]
+def p_initialization(p):
+    '''initialization : assignments'''
+    p[0] = p[1]
 
 def p_assignments_1(p):
     '''assignments : assignment assignments'''
