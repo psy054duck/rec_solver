@@ -331,12 +331,15 @@ class MultiFuncClosedForm:
     def func_decl(self):
         return self._func_decl
 
+    def sympify(self):
+        return {self.func_decl: self.closed_form}
+
     @property
     def closed_form(self):
         return self._closed_form.copy()
 
     def to_z3(self):
-        return {self.func_decl: self._closed_form}
+        return {utils.to_z3(self.func_decl): utils.to_z3(self._closed_form)}
 
     def __str__(self):
         return "%s: %s" % (self.func_decl, self.closed_form)
