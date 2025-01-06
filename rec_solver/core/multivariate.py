@@ -468,7 +468,7 @@ def solve_multivariate_rec(rec: MultiRecurrence):
         # raise Exception('not a nearly tail recursion')
     # sp.pprint(sp.simplify(closed_form))
     # return [sp.simplify(closed_form) for closed_form in closed_forms]
-    return sp.simplify(closed_forms[0])
+    return {rec.func_sig: sp.simplify(closed_forms[0])}
 # f(n, M)
 #   if base_1(n): Mb_1
 #   elif base_2(n): Mb_2
