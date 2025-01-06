@@ -12,8 +12,8 @@ def solve_str(s):
         except:
             res = poly_expr_solving(rec, 2)
             if not res.is_trivial():
-                return res.as_dict()
-            return poly_expr_solving(rec, 3).as_dict()
+                return res
+            return poly_expr_solving(rec, 3)
     elif isinstance(rec, MultiRecurrence):
         return solve_multivariate_rec(rec)
     return None

@@ -5,6 +5,7 @@ from .recurrence import MultiRecurrence, Recurrence, LoopRecurrence, BaseCase, R
 from .ultimately_periodic import solve_ultimately_periodic_symbolic
 from . import utils
 from functools import reduce
+from .closed_form import MultiFuncClosedForm
 
 logger = logging.getLogger(__name__)
 
@@ -466,20 +467,4 @@ def solve_multivariate_rec(rec: MultiRecurrence):
         # new_rec.pprint()
         closed_forms = solve_nearly_tail(new_rec)
         # raise Exception('not a nearly tail recursion')
-    # sp.pprint(sp.simplify(closed_form))
-    # return [sp.simplify(closed_form) for closed_form in closed_forms]
-    return {rec.func_sig: sp.simplify(closed_forms[0])}
-# f(n, M)
-#   if base_1(n): Mb_1
-#   elif base_2(n): Mb_2
-#   else: f(vn, M1M)
-
-# f(n)
-#   ret(0) = if base(n(D)) b else ....
-#   n(0) = n
-#   M = I
-#   while (!base_1(n(d)) && !base_2(n(d)))
-#       if (phi(n(d))):
-#           n(d + 1) = vn(d)
-#           M(d + 1) = M1M(d)
-#           
+    return MultiFuncClosedForm(rec.func_sig, closed_forms[0])

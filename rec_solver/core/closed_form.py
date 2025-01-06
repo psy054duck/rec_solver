@@ -321,3 +321,22 @@ class ExprClosedForm:
 
     def as_dict(self):
         return self._closed_forms.copy()
+
+class MultiFuncClosedForm:
+    def __init__(self, func_decl, closed_form):
+        self._func_decl = func_decl
+        self._closed_form = sp.simplify(closed_form)
+
+    @property
+    def func_decl(self):
+        return self._func_decl
+
+    @property
+    def closed_form(self):
+        return self._closed_form.copy()
+
+    def to_z3(self):
+        return {self.func_decl: self._closed_form}
+
+    def __str__(self):
+        return "%s: %s" % (self.func_decl, self.closed_form)
