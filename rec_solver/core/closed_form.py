@@ -318,3 +318,6 @@ class ExprClosedForm:
     def to_z3(self):
         res = {utils.to_z3(expr): utils.to_z3(c) for expr, c in self._closed_forms.items()}
         return res
+
+    def as_dict(self):
+        return self._closed_forms.copy()
