@@ -27,8 +27,9 @@ t_LT      = r'<'
 t_LE      = r'<='
 t_EQ      = r'=='
 t_NE      = r'!='
-t_AND     = r'&&'
-t_OR      = r'\|\|'
+t_AND     = r'And'
+t_OR     = r'Or'
+# t_OR      = r'\|\|'
 t_NEG     = r'!'
 t_TRUE    = r'true'
 t_FALSE   = r'false'
@@ -53,6 +54,10 @@ def t_ID(t):
         t.type = 'TRUE'
     elif t.value == 'false':
         t.type = 'FALSE'
+    elif t.value == 'And':
+        t.type = 'AND'
+    elif t.value == 'Or':
+        t.type = 'OR'
     return t
 
 # Define a rule so we can track line numbers

@@ -130,33 +130,78 @@ def p_condition_atom_FALSE(p):
     '''condition_atom : FALSE'''
     p[0] = sp.false
 
-def p_condition_factor_1(p):
-    '''condition_factor : condition_atom'''
+def p_condition_term_atom(p):
+    '''condition_term : condition_atom'''
     p[0] = p[1]
 
-def p_condition_factor_2(p):
-    '''condition_factor : NEG condition'''
-    p[0] = sp.Not(p[2])
-
-def p_condition_factor_3(p):
-    '''condition_factor : LPAREN condition RPAREN'''
+def p_condition_term_paren(p):
+    '''condition_term : LPAREN condition RPAREN'''
     p[0] = p[2]
 
-def p_condition_term_1(p):
-    '''condition_term : condition_factor AND condition_term'''
-    p[0] = sp.And(p[1], p[3])
+def p_condition_list_1(p):
+    '''condition_list : condition COMMA condition_list'''
+    p[0] = [p[1]] + p[3]
 
-def p_condition_term_2(p):
-    '''condition_term : condition_factor'''
-    p[0] = p[1]
+def p_condition_list_2(p):
+    '''condition_list : condition'''
+    p[0] = [p[1]]
 
-def p_condition_1(p):
+def p_condition_single(p):
     '''condition : condition_term'''
     p[0] = p[1]
 
-def p_condition_2(p):
-    '''condition : condition_term OR condition'''
-    p[0] = sp.Or(p[1], p[2])
+def p_condition_and(p):
+    '''condition : AND LPAREN condition_list RPAREN'''
+    p[0] = sp.And(*p[3])
+
+def p_condition_or(p):
+    '''condition : OR LPAREN condition_list RPAREN'''
+    p[0] = sp.Or(*p[3])
+
+def p_condition_neg(p):
+    '''condition : NEG LPAREN condition_list RPAREN'''
+    p[0] = sp.Not(*p[3])
+
+
+# def p_condition_factor_1(p):
+#     '''condition_factor : condition_atom'''
+#     p[0] = p[1]
+# 
+# def p_condition_factor_2(p):
+#     '''condition_factor : NEG condition'''
+#     p[0] = sp.Not(p[2])
+# 
+# def p_condition_factor_3(p):
+#     '''condition_factor : LPAREN condition RPAREN'''
+#     p[0] = p[2]
+# 
+# def p_condition_term_1(p):
+#     '''condition_term : AND LPAREN condition_list RPAREN'''
+#     p[0] = sp.And(*p[3])
+# 
+# def p_condition_term_3(p):
+#     '''condition_term : OR LPAREN condition_list RPAREN'''
+#     p[0] = sp.Or(*p[3])
+# 
+# def p_condition_list_1(p):
+#     '''condition_list : condition COMMA condition_list'''
+#     p[0] = [p[1]] + p[3]
+# 
+# def p_condition_list_2(p):
+#     '''condition_list : condition'''
+#     p[0] = [p[1]]
+# 
+# def p_condition_term_2(p):
+#     '''condition_term : condition_factor'''
+#     p[0] = p[1]
+# 
+# def p_condition_1(p):
+#     '''condition : condition_term'''
+#     p[0] = p[1]
+
+# def p_condition_2(p):
+#     '''condition : condition_term OR condition'''
+#     p[0] = sp.Or(p[1], p[2])
 
 def p_lhs(p):
     '''lhs : ID LPAREN expression_list RPAREN'''

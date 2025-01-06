@@ -298,6 +298,13 @@ class ExprClosedForm:
         self._closed_forms = closed_forms
         self._ind_var = ind_var
 
+    def is_trivial(self):
+        if len(self._closed_forms) == 1:
+            v = list(self._closed_forms.keys())[0]
+            if v == 1:
+                return True
+        return False
+
     def __str__(self):
         res = ''
         for expr, c in self._closed_forms.items():
