@@ -322,6 +322,9 @@ class ExprClosedForm:
     def as_dict(self):
         return self._closed_forms.copy()
 
+    def sympify(self):
+        return {expr: c for expr, c in self._closed_forms.items()}
+
 class MultiFuncClosedForm:
     def __init__(self, func_decl, closed_form):
         self._func_decl = func_decl
