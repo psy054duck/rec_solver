@@ -5,9 +5,9 @@ import logging
 import z3
 from functools import reduce
 
-from .. import utils
-from ..recurrence import Recurrence, LoopRecurrence
-from ..closed_form import PeriodicClosedForm, PiecewiseClosedForm, SymbolicClosedForm
+from . import utils
+from .recurrence import Recurrence, LoopRecurrence
+from .closed_form import PeriodicClosedForm, PiecewiseClosedForm, SymbolicClosedForm
 from .solvable_polynomial import solve_solvable_map, is_solvable_map
 
 logger = logging.getLogger(__name__)

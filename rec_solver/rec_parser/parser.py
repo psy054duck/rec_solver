@@ -1,7 +1,7 @@
 from .lexer import lexer, tokens
 import ply.yacc as yacc
 import sympy as sp
-from ..recurrence import Recurrence
+from ..core.recurrence import Recurrence
 
 def p_recurrence(p):
     '''recurrence : initialization if'''

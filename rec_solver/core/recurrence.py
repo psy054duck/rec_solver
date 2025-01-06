@@ -172,6 +172,9 @@ class MultiRecurrence:
 
     def number_ret(self):
         any_case = self.get_base_cases()[0]
+        if isinstance(any_case.op, sp.Piecewise):
+            arg = any_case.op.args[0]
+            return len(arg[0])
         return len(any_case.op)
 
     def subs(self, mapping):

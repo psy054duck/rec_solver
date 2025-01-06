@@ -1,7 +1,7 @@
 import sympy as sp
 from itertools import product
-from ..recurrence import Recurrence
-from ..closed_form import ExprClosedForm
+from .recurrence import Recurrence
+from .closed_form import ExprClosedForm
 
 def gen_poly_template(X, d):
     monomials = {sp.Integer(1)}

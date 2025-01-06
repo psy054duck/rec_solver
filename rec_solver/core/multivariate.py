@@ -1,9 +1,9 @@
 import logging
 import sympy as sp
 import z3
-from ..recurrence import MultiRecurrence, Recurrence, LoopRecurrence, BaseCase, RecursiveCase
+from .recurrence import MultiRecurrence, Recurrence, LoopRecurrence, BaseCase, RecursiveCase
 from .ultimately_periodic import solve_ultimately_periodic_symbolic
-from .. import utils
+from . import utils
 from functools import reduce
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,11 @@ def rec2nearly_tail(rec: MultiRecurrence):
     new_rec_cases = ori_rec_cases
 
     for i, cached in enumerate(base_cached):
-        new_base_cases[i].op = new_base_cases[i].op + cached
+        if isinstance(cached, sp.Piecewise):
+            new_args = [(new_base_cases[i].op + arg[0], arg[1]) for arg in cached.args]
+            new_base_cases[i].op = sp.Piecewise(*new_args)
+        else:
+            new_base_cases[i].op = new_base_cases[i].op + cached
 
     for i, cached in enumerate(rec_cached):
         # new_rec_cases[i].recursive_calls = {pivot_calls[i].pivot_call_name: all_pivot_func[i]}
@@ -103,9 +107,14 @@ def gen_cached_op(pivot_calls: list[PivotCall], i):
             for i, cached in enumerate(base_cached):
                 # if some path is infeasible, the value remains unchanged
                 # op = cached if len(cached) != 0 else (sp.Integer(0),)
-                op = cached if len(cached) != 0 else tuple(ret_names)
+                op = cached # if len(cached) != 0 else tuple(ret_names)
+                # op = (cached,)
                 try:
-                    base_res[i] = base_res[i] + op
+                    if isinstance(op, sp.Piecewise):
+                        new_args = [(base_res[i] + arg[0], arg[1]) for arg in op.args]
+                        base_res[i] = sp.Piecewise(*new_args)
+                    else:
+                        base_res[i] = base_res[i] + op
                 except IndexError:
                     base_res.append(op)
             for i, cached in enumerate(rec_cached):

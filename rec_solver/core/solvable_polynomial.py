@@ -1,6 +1,6 @@
 import sympy as sp
-from .. import utils
-from ..recurrence import Recurrence
+from . import utils
+from .recurrence import Recurrence
 from functools import reduce
 
 def solve_solvable_map(rec: Recurrence):
