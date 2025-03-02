@@ -2,6 +2,7 @@ import z3
 import sympy as sp
 from . import utils
 from collections import defaultdict
+# z3.set_option(max_depth=99999999, max_args=9999999, max_width=999999999, max_lines=99999999, max_indent=99999999)
 
 class PeriodicClosedForm:
     def __init__(self, closed_form_list, ind_var):
@@ -14,7 +15,10 @@ class PeriodicClosedForm:
         else:
             assert(n >= 0)
             r = n % self.period
-        val = {k.subs({self.ind_var: n}, simultaneous=True): c.subs({self.ind_var: n}, simultaneous=True) for k, c in self._closed_form_list[r].items()}
+        if isinstance(n, int):
+            n = z3.IntVal(n)
+        # val = {k.subs({self.ind_var: n}, simultaneous=True): c.subs({self.ind_var: n}, simultaneous=True) for k, c in self._closed_form_list[r].items()}
+        val = {z3.simplify(z3.substitute(k, (self.ind_var, n))): z3.substitute(c, (self.ind_var, n)) for k, c in self._closed_form_list[r].items()}
         return val
 
     def sympify(self):
@@ -22,10 +26,23 @@ class PeriodicClosedForm:
         for i in range(self.period):
             cond = True
             if self.period != 1:
-                cond = sp.Eq(self.ind_var % self.period, i)
+                cond = sp.Eq(utils.to_sympy(self.ind_var) % self.period, i)
             for f in self.closed_forms[i]:
-                sympified[f].append((self.closed_forms[i][f], cond))
-        return {f: sp.Piecewise(*sympified[f]) for f in sympified}
+                sympified[utils.to_sympy(f)].append((utils.to_sympy(self.closed_forms[i][f]), cond))
+        res = {f: sp.Piecewise(*sympified[f]) for f in sympified}
+        return res
+
+    def as_dict(self):
+        tmp_res = defaultdict(list)
+        for i in range(self.period):
+            cond = z3.BoolVal(True)
+            if self.period != 1:
+                cond = self.ind_var % self.period == i
+            for f in self.closed_forms[i]:
+                tmp_res[f].append((self.closed_forms[i][f], cond))
+        return {z3.simplify(f): utils.to_ite(tmp_res[f]) for f in tmp_res}
+
+
 
     def pprint(self):
         sp.init_printing()
@@ -37,7 +54,8 @@ class PeriodicClosedForm:
     def subs(self, mapping):
         new_list = []
         for part in self._closed_form_list:
-            cur_closed = {k: c.subs(mapping, simultaneous=True) for k, c in part.items()}
+            # cur_closed = {k: c.subs(mapping, simultaneous=True) for k, c in part.items()}
+            cur_closed = {k: z3.substitute(c, *list(mapping.items())) for k, c in part.items()}
             new_list.append(cur_closed)
         return PeriodicClosedForm(new_list, self.ind_var)
 
@@ -63,15 +81,13 @@ class PeriodicClosedForm:
         return self.selected_to_z3(self.all_vars)
 
     def selected_to_z3(self, vars):
-        ind_var_z3 = utils.to_z3(self.ind_var)
         closed_form_z3_list = [self._to_z3(closed, vars) for closed in self._closed_form_list]
         res = {}
         for var in vars:
-            var_z3 = utils.to_z3(var)
-            expr_z3 = closed_form_z3_list[-1][var_z3]
+            expr_z3 = closed_form_z3_list[-1][var]
             for i, closed in enumerate(closed_form_z3_list[:-1]):
-                expr_z3 = z3.If(ind_var_z3 % self.period == i, closed[var_z3], expr_z3)
-            res[var_z3] = z3.simplify(expr_z3)
+                expr_z3 = z3.If(self.ind_var % self.period == i, closed[var], expr_z3)
+            res[var] = z3.simplify(expr_z3)
         return res
 
 
@@ -79,9 +95,7 @@ class PeriodicClosedForm:
         res = {}
         for k in vars:
             c = closed[k]
-            k_z3 = utils.to_z3(k)
-            c_z3 = utils.to_z3(c)
-            res[k_z3] = c_z3
+            res[k] = c
         return res
 
     @property
@@ -127,12 +141,14 @@ class PiecewiseClosedForm:
         return self.closed_forms[which].subs({self.ind_var: n})
 
     def sympify(self):
+        sim = z3.Then(z3.With('simplify', elim_ite=True), z3.Tactic('ctx-solver-simplify'), z3.Tactic('solve-eqs'))
         expressions = defaultdict(list)
         for cond, closed in zip(self.conditions, self.closed_forms):
             sp_closed = closed.sympify()
             for f in sp_closed:
-                expressions[f].append((sp_closed[f], cond))
-        return {f: sp.Piecewise(*expressions[f]) for f in expressions}
+                expressions[f].append((sp_closed[f], utils.to_sympy(cond)))
+        res = {f: sp.Piecewise(*expressions[f]) for f in expressions}
+        return res
 
     def pprint(self):
         sp.init_printing()
@@ -142,27 +158,30 @@ class PiecewiseClosedForm:
             print()
 
     def subs(self, mapping):
-        conditions = [c.subs(mapping, simultaneous=True) for c in self.conditions]
+        # conditions = [c.subs(mapping, simultaneous=True) for c in self.conditions]
+        conditions = [z3.substitute(c, *tuple(mapping.items())) for c in self.conditions]
         closed_forms = [c.subs(mapping) for c in self.closed_forms]
         return PiecewiseClosedForm(conditions, closed_forms, self.ind_var)
 
     def simple_subs(self, mapping):
-        conditions = [c.subs(mapping, simultaneous=True) for c in self.conditions]
+        mapping = mapping | {z3.BoolVal(1): z3.BoolVal(1)}
+        mapping_list = list(mapping.items())
+        conditions = [z3.substitute(c, *mapping_list) for c in self.conditions]
+        # closed_forms = [z3.substitute(c, *mapping_list) for c in self.closed_forms]
         closed_forms = [c.subs(mapping) for c in self.closed_forms]
         return PiecewiseClosedForm(conditions, closed_forms, self.ind_var)
 
-    def to_z3(self):
-        ind_var_z3 = utils.to_z3(self.ind_var)
-        closed_forms_z3 = [closed.to_z3() for closed in self.closed_forms]
+    def as_dict(self):
+        closed_forms_z3 = [closed.as_dict() for closed in self.closed_forms]
         res = {}
         for var in self.all_vars:
-            var_z3 = utils.to_z3(var)
+            var_z3 = var
             expr_z3 = closed_forms_z3[0][var_z3]
             # for i, interval in enumerate(self.intervals[:-1]):
             for i, cond in enumerate(self.conditions):
                 # cond = utils.interval_to_z3(interval, self.ind_var)
                 closed = closed_forms_z3[i][var_z3]
-                expr_z3 = z3.If(utils.to_z3(cond), closed, expr_z3)
+                expr_z3 = z3.If(cond, closed, expr_z3)
             res[var_z3] = z3.simplify(expr_z3)
         return res
 
@@ -206,6 +225,24 @@ class SymbolicClosedForm:
         self._constraints = constraints
         self._closed_forms = closed_forms
         self._ind_var = ind_var
+        self._reorder()
+        self._simplify_constraints()
+        # assert(self._check_consistant())
+
+    def _reorder(self):
+        cond_lengths = [len(str(cond)) for cond in self._constraints]
+        longest = max(cond_lengths)
+        longest_idx = cond_lengths.index(longest)
+        self._constraints[longest_idx], self._constraints[-1] = self._constraints[-1], self._constraints[longest_idx]
+        self._closed_forms[longest_idx], self._closed_forms[-1] = self._closed_forms[-1], self._closed_forms[longest_idx]
+
+    def _check_consistant(self):
+        solver = z3.Solver()
+        res = solver.check(z3.Not(z3.Or(*self._constraints)))
+        return res == z3.unsat
+
+    def _simplify_constraints(self):
+        self._constraints[-1] = z3.Not(z3.Or(False, *self._constraints[:-1]))
 
     def __str__(self):
         res = ''
@@ -216,9 +253,13 @@ class SymbolicClosedForm:
 
     def sympify(self):
         expressions = defaultdict(list)
+        sim = z3.Tactic('ctx-solver-simplify')
         for cond, closed in zip(self._constraints, self._closed_forms):
             sp_closed = closed.sympify()
-            sp_cond = sp.parse_expr(str(cond))
+            simplified_cond = z3.simplify(z3.Or(*[z3.And(*conjunct) for conjunct in sim(cond)]))
+            sp_cond = utils.to_sympy(z3.simplify(simplified_cond))
+            assert('If' not in str(sp_cond))
+            # sp_cond = sp.parse_expr(str(z3.simplify(cond)), local_dict={'If': utils.ite2piecewise})
             if sp_cond is True:
                 sp_cond = sp.true
             to_integer_dict = {}
@@ -237,21 +278,27 @@ class SymbolicClosedForm:
         sp.init_printing()
         sp_dict = self.sympify()
         for f in sp_dict:
+            # print(sp_dict[f])
+            # if isinstance(sp_dict[f], sp.Piecewise):
+            #     for arg in sp_dict[f].args:
+            #         print(arg)
+            assert('If' not in str(sp_dict[f]))
+            # TODO there is a deep bug here, the two calls to to_sympy is tentative. should trace the sympify of all closed_forms to see which one fail to sympyfy If
             sp.pprint(sp.simplify(sp.Eq(f, sp_dict[f])))
             print()
 
     def subs(self, mapping):
-        constraints = [z3.substitute(c, *[(utils.to_z3(k), utils.to_z3(v)) for k, v in mapping.items()]) for c in self._constraints]
+        constraints = [z3.substitute(c, *[(k, v) for k, v in mapping.items()]) for c in self._constraints]
         closed_forms = [c.subs(mapping) for c in self._closed_forms]
         return SymbolicClosedForm(constraints, closed_forms, self.ind_var)
 
-    def to_z3(self):
+    def as_dict(self):
         res = {}
         for var in self.all_vars:
-            var_z3 = utils.to_z3(var)
-            expr = self._closed_forms[-1].to_z3()[var_z3]
+            var_z3 = var
+            expr = self._closed_forms[-1].as_dict()[var_z3]
             for constraint, closed in zip(self._constraints[:-1], self._closed_forms[:-1]):
-                expr = z3.If(constraint, closed.to_z3()[var_z3], expr)
+                expr = z3.If(constraint, closed.as_dict()[var_z3], expr)
             res[var_z3] = z3.simplify(expr)
         return res
 
@@ -262,7 +309,7 @@ class SymbolicClosedForm:
     @property
     def conditions(self):
         conditions = []
-        for cons, piece_closed in zip(self._constraints, self.closed_forms):
+        for cons, piece_closed in zip(self._constraints, self._closed_forms):
             for piece_cond, periodic_closed in zip(piece_closed.conditions, piece_closed.closed_forms):
                 period = periodic_closed.period
                 for i in range(period):
@@ -280,11 +327,19 @@ class SymbolicClosedForm:
                 
     @property
     def closed_forms(self) -> list[PiecewiseClosedForm]:
-        return self._closed_forms
+        # return self._closed_forms
+        return sum([closed.closed_forms for closed in self._closed_forms], [])
+
 
     @property
     def cases(self):
-        return self._constraints
+        # return self._constraints
+        cases = []
+        assert(len(self._constraints) == len(self._closed_forms))
+        for cond_sym, closed in zip(self._constraints, self._closed_forms):
+            for form, cond_piece in zip(closed.closed_forms, closed.conditions):
+                cases.append((form, z3.And(cond_sym, cond_piece)))
+        return cases
 
     @property
     def all_vars(self):
@@ -328,7 +383,7 @@ class ExprClosedForm:
 class MultiFuncClosedForm:
     def __init__(self, func_decl, closed_form):
         self._func_decl = func_decl
-        self._closed_form = sp.simplify(closed_form)
+        self._closed_form = z3.simplify(closed_form)
 
     @property
     def func_decl(self):
@@ -339,7 +394,7 @@ class MultiFuncClosedForm:
 
     @property
     def closed_form(self):
-        return self._closed_form.copy()
+        return self._closed_form
 
     def to_z3(self):
         return {utils.to_z3(self.func_decl): utils.to_z3(self._closed_form)}

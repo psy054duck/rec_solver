@@ -1,9 +1,9 @@
 import sympy as sp
 from sympy.core.function import AppliedUndef
 import logging
-# import cvc5.pythonic as z3
 import z3
 from functools import reduce
+from itertools import product
 
 from . import utils
 from .recurrence import Recurrence, LoopRecurrence
@@ -15,54 +15,74 @@ logger = logging.getLogger(__name__)
 class UnsolvableError(Exception):
     pass
 
-def solve_ultimately_periodic_symbolic(rec: Recurrence, bnd=100, precondition=z3.BoolVal(True)):
+def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, precondition=z3.BoolVal(True)):
     z3_solver = z3.Solver()
     z3_solver.add(precondition)
     acc_condition = z3.BoolVal(True)
     i = 0
     logger.debug("Solving recurrence %s" % rec)
+    # rec.pprint()
     constraints = []
     closed_forms = []
     if rec.is_all_initialized():
         return solve_ultimately_periodic_initial(rec, bnd)
     while z3_solver.check(acc_condition) != z3.unsat:
+        print(acc_condition)
         i += 1
         model = z3_solver.model()
         parameters = rec.get_symbolic_values()
-        cur_val = {p: model.eval(utils.to_z3(p), model_completion=True).as_long() for p in parameters}
+        cur_val = {p: model.eval(p, model_completion=True) for p in parameters}
         initialized_rec = rec.subs(cur_val)
+        initialized_rec.pprint()
         _, index_seq = _solve_ultimately_periodic_initial(initialized_rec)
-        # qs = [z3.Int('q%d' % i) for i in range(len(index_seq) - 1)]
-        qs = sp.symbols('q:%d' % (len(index_seq) - 1))
+        qs = [z3.Int('q%d' % i) for i in range(len(index_seq) - 1)]
+        # qs = sp.symbols('q:%d' % (len(index_seq) - 1), integer=True)
         index_seq_temp = [(s[0], q) for s, q in zip(index_seq, qs)] + [index_seq[-1]]
         can_sol = _compute_solution_by_index_seq(rec, index_seq_temp)
-        constraint, k = _set_up_constraints(rec, can_sol, index_seq_temp)
-        constraint = z3.And(constraint, *[utils.to_z3(q) >= 1 for q in qs])
+        quantified_constraint, k = _set_up_constraints(rec, can_sol, index_seq_temp)
+        quantified_constraint = z3.And(quantified_constraint, *[q >= 1 for q in qs])
+        qe = z3.Then('qe', 'ctx-solver-simplify')
+        # constraint = z3.And(*qe.apply(z3.ForAll(k, z3.Implies(k >= 0, quantified_constraint)))[0])
+        constraint = z3.simplify(z3.Or(*[z3.And(*c) for c in qe.apply(z3.ForAll(k, z3.Implies(k >= 0, quantified_constraint)))]))
+        logger.debug('In the %dth iteration: the sampled initial values are %s' % (i, cur_val))
         logger.debug('In the %dth iteration: the index sequence is %s' % (i, index_seq))
         logger.debug('In the %dth iteration: the set up index sequence template is %s' % (i, index_seq_temp))
         logger.debug('In the %dth iteration: the closed-form solution is\n%s' % (i, can_sol))
+        logger.debug('In the %dth iteration: the set up quantified constraint is\n%s' % (i, quantified_constraint))
         logger.debug('In the %dth iteration: the set up constraint is\n%s' % (i, constraint))
-        q_linear = [utils.compute_q(constraint, q, parameters, k) for q in qs]
-        assert(q_linear is not None)
-        constraint_no_q = z3.substitute(constraint, *[(utils.to_z3(q), linear) for q, linear in zip(qs, q_linear)])
-        qe = z3.Tactic('qe')
-        # print(qe.apply(z3.ForAll(k, z3.Implies(k >= 0, constraint_no_q))))
-        constraint_no_kq = z3.simplify(z3.And(*qe.apply(z3.ForAll(k, z3.Implies(k >= 0, constraint_no_q)))[0]))
-        logger.debug('In the %dth iteration: the parameters satisfy\n%s' % (i, constraint_no_kq))
-        acc_condition = z3.And(acc_condition, z3.Not(constraint_no_kq))
-        constraints.append(constraint_no_kq)
-        mapping = {q: sp.sympify(str(linear)) for q, linear in zip(qs, q_linear)}
-        for q in mapping:
-            symbols = mapping[q].free_symbols
-            mapping[q] = mapping[q].subs({s: sp.Symbol(s.name, integer=True) for s in symbols})
-        closed_forms.append(can_sol.simple_subs(mapping))
+        # q_linear = [utils.compute_q(constraint, q, parameters, k) for q in qs]
+        q_linear = [utils.solve_piecewise_sol(constraint, q, sort=z3.Int) for q in qs]
+        # for q_conditional_exprs in product(*q_linear)
+        print([q.to_piecewise() for q in q_linear])
+        print('*'*10)
+        for q_constraint, q_sol in _unpack_q_expressions(q_linear):
+            constraint_no_q = z3.substitute(z3.And(constraint, q_constraint), *[(q, linear) for q, linear in zip(qs, q_sol)])
+            qe = z3.Tactic('qe')
+            forall_constraint = z3.ForAll(k, z3.Implies(k >= 0, constraint_no_q))
+            constraint_no_kq = z3.simplify(z3.Or(*[z3.And(*conjunct) for conjunct in qe.apply(forall_constraint)]))
+            constraints.append(constraint_no_kq)
+            acc_condition = z3.And(acc_condition, z3.Not(constraint_no_kq))
+            # mapping = {q: utils.to_sympy(linear) for q, linear in zip(qs, q_sol)}
+            mapping = {q: linear for q, linear in zip(qs, q_sol)}
+            # for q in mapping:
+            #     symbols = mapping[q].free_symbols
+            #     mapping[q] = mapping[q].subs({s: sp.Symbol(s.name, integer=True) for s in symbols}, simultaneous=True)
+            closed_forms.append(can_sol.simple_subs(mapping))
     return SymbolicClosedForm(constraints, closed_forms, rec.ind_var)
 
-def solve_ultimately_periodic_initial(rec: Recurrence, bnd=100):
+def _unpack_q_expressions(q_linear):
+    conditions = [conditional_e.conditions for conditional_e in q_linear]
+    expressions = [conditional_e.expressions for conditional_e in q_linear]
+    lengths = [len(conditional_e.conditions) for conditional_e in q_linear]
+    indices = [tuple(range(l)) for l in lengths]
+    for index in product(*indices):
+        yield z3.And(*[condition[i] for i, condition in zip(index, conditions)]), [expression[i] for i, expression in zip(index, expressions)]
+
+def solve_ultimately_periodic_initial(rec: LoopRecurrence, bnd=100):
     closed_form, _ = _solve_ultimately_periodic_initial(rec, bnd)
     return closed_form
 
-def _solve_ultimately_periodic_initial(rec: Recurrence, bnd=100):
+def _solve_ultimately_periodic_initial(rec: LoopRecurrence, bnd=100):
     assert(rec.is_all_initialized())
     n = 10
     start = 0
@@ -76,7 +96,8 @@ def _solve_ultimately_periodic_initial(rec: Recurrence, bnd=100):
         smallest = verify(rec, candidate, guessed_index_seq)
         shift_candidate = candidate.subs({candidate.ind_var: candidate.ind_var - start})
         closed_form = closed_form.concatenate(shift_candidate)
-        if smallest is not sp.oo: # means hypothesis is wrong
+        # if smallest is not sp.oo: # means hypothesis is wrong
+        if smallest is not None:
             start = smallest
         else:
             break
@@ -90,33 +111,51 @@ def verify(rec: Recurrence, candidate_sol: PiecewiseClosedForm, pattern: list):
     assert(isinstance(last_closed_form, PeriodicClosedForm))
     period = last_closed_form.period
     periodic_index_seq, _ = pattern[-1]
-    n = sp.Symbol('__n', integer=True)
-    k = sp.Symbol('__k', integer=True)
+    n = z3.Int('__n')
+    k = z3.Int('__k')
     n_range = n >= start
-    smallest = sp.oo
+    smallest = None
     for r, i in enumerate(periodic_index_seq):
         cond = conditions[i]
-        if cond == sp.true:
+        if cond == z3.BoolVal(True):
             continue
-        cond = cond.subs(last_closed_form.get_rth_part_closed_form(r), simultaneous=True)
-        cond = cond.subs({candidate_sol.ind_var: period*k + r}, simultaneous=True)
-        cond_range = cond.as_set()
-        k_range = n_range.subs({n: period*k + r}, simultaneous=True).as_set()
-        if not k_range.is_subset(cond_range):
-            cur_smallest = _smallest_violation(k_range, cond_range, period, r, rec.ind_var)
-            cur_smallest = cur_smallest*period + r
-            smallest = min(smallest, cur_smallest)
+        # cond = cond.subs(last_closed_form.get_rth_part_closed_form(r), simultaneous=True)
+        # cond = cond.subs({candidate_sol.ind_var: period*k + r}, simultaneous=True)
+        cond = z3.substitute(cond, *list(last_closed_form.get_rth_part_closed_form(r).items()))
+        cond = z3.substitute(cond, (candidate_sol.ind_var, period*k + r))
+        # k_range = n_range.subs({n: period*k + r}, simultaneous=True).as_set()
+        k_range = z3.substitute(n_range, (n, period*k + r))
+        solver = z3.Solver()
+        # if not k_range.is_subset(cond_range):
+        solver.add(k_range)
+        solver.add(z3.Not(cond))
+        if solver.check() == z3.sat:
+            cur_smallest = _smallest_violation(k_range, cond, k)
+            cur_smallest = z3.simplify(cur_smallest*period + r).as_long()
+            if smallest is None:
+                smallest = cur_smallest
+            else:
+                smallest = min(smallest, cur_smallest)
     return smallest
 
-def _smallest_violation(n_range: sp.Interval, cond_range: sp.Interval, period, r, ind_var):
-    intersect = n_range.intersect(cond_range)
-    comp = intersect.complement(n_range)
-    left = sp.ceiling(comp.inf)
-    if not comp.contains(left):
-        left += 1
-    return left
+def _smallest_violation(n_range, cond_range, k):
+    '''both n_range and cond_range are z3 expressions representing some certain intervals, where k is the intermediate variable'''
+    minimal = z3.Int('_minimal')
+    solver = z3.Solver()
+    solver.add(z3.ForAll(k, z3.Implies(k < minimal, z3.Implies(n_range, cond_range))))
+    solver.add(z3.Not(z3.substitute(z3.Implies(n_range, cond_range), (k, minimal))))
+    sat_res = solver.check()
+    assert(sat_res == z3.sat)
+    m = solver.model()
+    return m.eval(minimal)
+    # intersect = n_range.intersect(cond_range)
+    # comp = intersect.complement(n_range)
+    # left = sp.ceiling(comp.inf)
+    # if not comp.contains(left):
+    #     left += 1
+    # return left
 
-def _compute_solution_by_index_seq(rec: Recurrence, index_seq):
+def _compute_solution_by_index_seq(rec: LoopRecurrence, index_seq):
     patterns = [seq for seq, _ in index_seq]
     acc_thresholds = [sum(cnt for _, cnt in index_seq[:i]) for i in range(1, len(index_seq))]
     nums = [cnt for _, cnt in index_seq]
@@ -135,10 +174,21 @@ def _compute_solution_by_index_seq(rec: Recurrence, index_seq):
     for closed, t in zip(shift_closed, nums):
         acc += t
         closed_forms.append(closed.subs(initial))
-        initial = {k.func(0): v for k, v in closed_forms[-1].eval_at(acc).items()}
+        initial = {k.decl()(0): v for k, v in closed_forms[-1].eval_at(acc).items()}
 
     thresholds = [-sp.oo] + thresholds[1:]
-    conditions = [sp.Interval(thresholds[i], thresholds[i + 1], left_open=False, right_open=True).as_relational(rec.ind_var) for i in range(len(thresholds) - 1)]
+    # conditions = [sp.Interval(thresholds[i], thresholds[i + 1], left_open=False, right_open=True).as_relational(rec.ind_var) for i in range(len(thresholds) - 1)]
+    conditions = []
+    for i in range(len(thresholds) - 1):
+        if thresholds[i] is -sp.oo and thresholds[i + 1] is sp.oo:
+            conditions.append(z3.BoolVal(True))
+        elif thresholds[i] is -sp.oo:
+            conditions.append(rec.ind_var < thresholds[i + 1])
+        elif thresholds[i + 1] is sp.oo:
+            conditions.append(thresholds[i] <= rec.ind_var)
+        else:
+            conditions.append(z3.And(thresholds[i] <= rec.ind_var, rec.ind_var < thresholds[i + 1]))
+    # conditions = [z3.And(thresholds[i] <= rec.ind_var, rec.ind_var < thresholds[i + 1]) for i in range(len(thresholds) - 1)]
     return PiecewiseClosedForm(conditions, closed_forms, rec.ind_var)
 
 def _compute_candidate_solution(rec: Recurrence, start, n, ith):
@@ -151,7 +201,7 @@ def _compute_candidate_solution(rec: Recurrence, start, n, ith):
     logger.debug(padding + "prefix of index sequence is %s" % index_seq)
     logger.debug(padding + "the guessed patterns are %s" % guessed_patterns)
     first_value = values[0]
-    initial = {func.func(0): first_value[func] for func in first_value}
+    initial = {func.decl()(0): first_value[func] for func in first_value}
     new_rec = rec.copy_rec_with_diff_initial(initial)
     sol = _compute_solution_by_index_seq(new_rec, compressed_seq)
     # shift_sol = sol.subs({sol.ind_var: sol.ind_var - start})
@@ -160,13 +210,15 @@ def _compute_candidate_solution(rec: Recurrence, start, n, ith):
 
 def _solve_as_nonconditional(rec: Recurrence, seq):
     new_rec = LoopRecurrence.build_nonconditional_from_rec_by_seq(rec, seq, {})
+    new_rec.pprint()
     period = len(seq)
     if is_solvable_map(new_rec):
         closed_form = []
         raw_closed_form = solve_solvable_map(new_rec)
         # modulo part
         for i in range(period):
-            shift_closed = {v: c.subs({rec.ind_var: (rec.ind_var - i)/period}, simultaneous=True) for v, c in raw_closed_form.items()}
+            # shift_closed = {v: c.subs({rec.ind_var: (rec.ind_var - i)/period}, simultaneous=True) for v, c in raw_closed_form.items()}
+            shift_closed = {v: z3.substitute(c, (rec.ind_var, (rec.ind_var - i)/period)) for v, c in raw_closed_form.items()}
             for j in seq[:i]:
                 shift_closed = rec.run_one_iteration_for_ith_transition(shift_closed, j)
             closed_form.append(shift_closed)
@@ -175,24 +227,30 @@ def _solve_as_nonconditional(rec: Recurrence, seq):
         raise UnsolvableError("Recurrence of this kind is not solvable.")
     return res
 
-def _set_up_constraints(rec: Recurrence, closed_form: PiecewiseClosedForm, index_seq):
-    rec_conditions = [utils.to_z3(cond) for cond in rec.conditions]
+def _set_up_constraints(rec: LoopRecurrence, closed_form: PiecewiseClosedForm, index_seq):
+    # rec_conditions = [utils.to_z3(cond) for cond in rec.conditions]
+    rec_conditions = rec.conditions
     # intervals = closed_form.intervals
     k = z3.Int('k')
     constraint = True
-    ind_var = utils.to_z3(closed_form.ind_var)
+    ind_var = closed_form.ind_var
     for i, (seq, q) in enumerate(index_seq):
         # premise = utils.interval_to_z3(intervals[i], closed_form.ind_var)
-        premise = utils.to_z3(closed_form.conditions[i])
+        premise = closed_form.conditions[i]
         closed_form_component = closed_form.closed_forms[i]
         period = closed_form_component.period
+        solver = z3.Solver()
         for r, j in enumerate(seq):
-            if rec.conditions[j] == sp.true:
+            # if rec.conditions[j] == sp.true:
+            if solver.check(z3.Not(rec.conditions[j])) == z3.unsat:
                 continue
             # closed_form_z3 = closed_form_component.to_z3()
-            mentioned_vars = rec.conditions[j].atoms(AppliedUndef)
+            # mentioned_vars = rec.conditions[j].atoms(AppliedUndef)
+            mentioned_vars = utils.get_applied_functions(rec.conditions[j])
             closed_form_z3 = closed_form_component.selected_to_z3(mentioned_vars)
-            mapping = [(k, v) for k, v in closed_form_z3.items()]
+            mapping = [(kk, v) for kk, v in closed_form_z3.items()]
+            print(mapping)
+            print(j, rec.conditions[j])
             condition = z3.substitute(rec_conditions[j], *mapping)
             cur_constraint = z3.Implies(premise, condition)
             cur_constraint = z3.substitute(cur_constraint, (ind_var, period*k + r))
