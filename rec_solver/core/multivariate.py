@@ -351,7 +351,6 @@ def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
     for base_case in rec.get_base_cases():
         cond = base_case.condition
         ops = base_case.op
-        print(ops)
         # args = cond.free_symbols | reduce(set.union, [op.free_symbols for op in ops])
         args = utils.get_vars(cond) | reduce(set.union, [utils.get_vars(op) for op in ops])
         symbol2func_mapping = {arg: symbol2func(arg)(d) for arg in args}
@@ -374,7 +373,6 @@ def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
     # return [sp.piecewise_fold(closed_form_dict[symbol2func(ret)(d)].subs({ret: ret0})) for ret, ret0 in zip(rets, rets0)]
     mapping = {ret: ret0 for ret, ret0 in zip(rets, rets0)}
     # return [sp.piecewise_fold(closed_form_dict[symbol2func(ret)(d)].subs(mapping)) for ret in rets]
-    print(mapping)
     return [z3.substitute(closed_form_dict[symbol2func(ret)(d)], *list(mapping.items())) for ret in rets]
 
 def nearly_tail2loop(rec: MultiRecurrence, d, rets):
@@ -457,22 +455,22 @@ def compute_piecewise_D(d, D, loop_cond, loop_closed_form, precondition):
     # return z3.simplify(z3.Piecewise(*branches))
     return z3.simplify(utils.to_ite(branches))
 
-def gen_cases(d, D, loop_cond, case):
-    cond = loop_cond
-    case_z3 = case
-
-    axioms = set()
-    axioms.add(case_z3)
-    axioms.add(z3.ForAll([d], z3.Implies(z3.And(0 <= d, d < D), cond)))
-    axioms.add(z3.substitute(z3.Not(cond), (d, D)))
-    axioms.add(D >= 0)
-
-    qe = z3.Then(z3.With(z3.Tactic('simplify'), elim_ite=True), z3.Tactic('qe'), z3.Tactic('ctx-solver-simplify'))
-    constraints = z3.Or(*[z3.And(*conjunct) for conjunct in qe(z3.And(*axioms))])
-    cases = z3.Then(qe, utils.to_dnf)(z3.Exists(D, constraints))
-    common_conds = reduce(set.intersection, [set(c) for c in cases])
-    reduced_cases = [set(c) - common_conds for c in cases]
-    return reduced_cases
+# def gen_cases(d, D, loop_cond, case):
+#     cond = loop_cond
+#     case_z3 = case
+# 
+#     axioms = set()
+#     axioms.add(case_z3)
+#     axioms.add(z3.ForAll([d], z3.Implies(z3.And(0 <= d, d < D), cond)))
+#     axioms.add(z3.substitute(z3.Not(cond), (d, D)))
+#     axioms.add(D >= 0)
+# 
+#     qe = z3.Then(z3.With(z3.Tactic('simplify'), elim_ite=True), z3.Tactic('qe'), z3.Tactic('ctx-solver-simplify'))
+#     constraints = z3.Or(*[z3.And(*conjunct) for conjunct in qe(z3.And(*axioms))])
+#     cases = z3.Then(qe, utils.to_dnf)(z3.Exists(D, constraints))
+#     common_conds = reduce(set.intersection, [set(c) for c in cases])
+#     reduced_cases = [set(c) - common_conds for c in cases]
+#     return reduced_cases
 
 
 def compute_D_by_case(d, D, loop_cond, case, hints):
@@ -514,13 +512,16 @@ def compute_D_by_case(d, D, loop_cond, case, hints):
     solver = z3.Solver()
     # solver.add(case)
     solver.add(deno != 0)
+    print(utils.is_convex(constraints))
     solver.add(z3.ForAll(args + [D], z3.Implies(constraints, deno*D == linear_comb)))
     # print(solver)
     bnd = 5
     #TODO if constraints are assumed to be linear,
     #     then this query should also be linear by farkas lemma
     for _ in range(bnd):
+        print('hhh')
         res = solver.check()
+        print('hhhhhh')
         if res == z3.sat or res == z3.unsat:
             break
     if res == z3.sat:

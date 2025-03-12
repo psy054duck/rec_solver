@@ -5,28 +5,46 @@ import numpy as np
 from sympy.core.function import UndefinedFunction
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, convert_equals_signs
 import z3
+from itertools import product
+
 z3.set_option(max_depth=99999999)
+# z3.set_option(timeout=5)
 # import cvc5.pythonic as z3
 
-to_dnf = z3.Then(z3.With('simplify', elim_and=True), z3.Repeat(z3.OrElse(z3.Tactic('split-clause'), z3.Tactic('skip'))), 'ctx-solver-simplify')
+# to_dnf = z3.Then(z3.With('simplify', elim_and=True), z3.Repeat(z3.OrElse(z3.Tactic('split-clause'), z3.Tactic('skip'))), 'ctx-solver-simplify')
 # apply (then (! simplify :elim-and true) elim-term-ite tseitin-cnf))
-to_cnf = z3.Then(z3.With('simplify', elim_and=True), z3.Tactic('elim-term-ite'), z3.Tactic('tseitin-cnf'))
+# to_cnf = z3.Then(z3.With('simplify', elim_and=True), z3.Tactic('elim-term-ite'), z3.Tactic('tseitin-cnf'))
 coeff_idx = 0
 
 class ConditionalExpr:
     def __init__(self, conds, exprs):
+        self._preprocess(conds, exprs)
+
+    def _preprocess(self, conds, exprs):
         self.conditions = conds
         self.expressions = exprs
+        self.vars = reduce(set.union, [set(e.keys()) for e in exprs], set())
 
+        # for e1 in all_exprs:
+        #     cur_cond = []
+        #     solver = z3.Solver()
+        #     for cond, e2 in zip(conds, exprs):
+        #         if solver.check(e1 != e2) == z3.unsat:
+        #             cur_cond.append(cond)
+        #     self.expressions.append(e1)
+        #     self.conditions.append(z3.simplify(z3.Or(*cur_cond)))
+        
     def add_case(self, cond, expr):
         self.conditions.append(cond)
         self.expressions.append(expr)
 
     def to_piecewise(self):
-        res = list(zip([to_sympy(e) for e in self.expressions], [to_sympy(c) for c in self.conditions]))
-        res[-1] = (res[-1][0], True)
-        # return sp.Piecewise(*res)
-        return sp.piecewise_fold(sp.Piecewise(*res))
+        ret = {}
+        for var in self.vars:
+            res = list(zip([to_sympy(e[var]) for e in self.expressions], [to_sympy(c) for c in self.conditions]))
+            res[-1] = (res[-1][0], True)
+            ret[var] = sp.piecewise_fold(sp.Piecewise(*res))
+        return ret
 
 def contains_function_symbols(expr):
     """
@@ -65,15 +83,17 @@ def simpliy_solver(e):
     simplified_e_z3 = collapse_goal(cases)
     return to_sympy(simplified_e_z3)
 
-def to_sympy(s_z3):
+def to_sympy(s_z3, is_integer=True):
     # s = str(z3.simplify(s_z3, eq2ineq=True))
     s = str(z3.simplify(s_z3))
     expr = sp.parse_expr(s, local_dict={'If': ite2piecewise}, evaluate=False, transformations=(standard_transformations + (convert_equals_signs,)))
     if expr is True or expr is False:
         return sp.sympify(expr)
     symbols = expr.free_symbols
-    symbols2int = {s: sp.Symbol(s.name, integer=True) for s in symbols}
-    res = expr.subs(symbols2int, simultaneous=True)
+    res = expr
+    if is_integer:
+        symbols2int = {s: sp.Symbol(s.name, integer=is_integer) for s in symbols}
+        res = expr.subs(symbols2int, simultaneous=True)
     return res
     
 
@@ -219,6 +239,8 @@ def to_z3(sp_expr, sort='int'):
         func_arg_sort = z3.IntSort()
     elif sort == 'real':
         func_arg_sort = z3.RealSort()
+    elif sort == 'bool':
+        func_arg_sort = z3.BoolSort()
     else:
         raise Exception('unsupported sort %s' % sort)
     if isinstance(self, sp.Add):
@@ -266,6 +288,8 @@ def to_z3(sp_expr, sort='int'):
             res = z3.Int(str(self))
         elif sort == 'real':
             res = z3.Real(str(self))
+        elif sort == 'bool':
+            res = z3.Bool(str(self))
     elif isinstance(self, sp.Rational):
         # return z3.RatVal(self.numerator, self.denominator)
         res = z3.IntVal(self.numerator) / z3.IntVal(self.denominator)
@@ -408,50 +432,80 @@ def flatten_seq(seq):
     return sum([l*c for l, c in seq], [])
 
 def solve_piecewise_sol(constraint, x, sort=z3.Real):
-    dnf = to_dnf(constraint)
-    solver = z3.Solver()
+    # dnf = to_dnf(constraint)
     premises = []
     linear_exprs = []
-    for conjunct in dnf:
-        formula = z3.And(*conjunct)
+    if is_convex(constraint):
+        atoms = get_all_atoms(constraint)
+        possible_eqs = {to_eq(atom) for atom in atoms}
+        solver = z3.Solver()
+        eqs = set()
+        solver.add(constraint)
+        for eq in possible_eqs:
+            if solver.check(z3.Not(eq)) == z3.unsat:
+                eqs.add(eq)
+        return ConditionalExpr([z3.BoolVal(True)], [solve_x(eqs, x)])
+    dnf = formula2dnf(constraint)
+    for conjunct in dnf.children():
+        # formula = z3.And(*conjunct)
+        formula = conjunct
         # try:
-        linear_expr = _solve_linear_expr_heuristic(conjunct, x)
+        linear_expr = _solve_linear_expr_heuristic(conjunct.children(), x)
         # except:
         #     linear_expr = None
-        if linear_expr is None:
-            all_vars = [var.n for var in get_vars(formula)]
-            vars = [var for var in all_vars if str(var) != str(x)] + [1]
-            coeffs = [sort('_c%d' % i) for i in range(len(vars))]
-            linear_template = sum([c*v for c, v in zip(coeffs, vars)])
-            res = solver.check(z3.ForAll(all_vars, z3.Implies(formula, x == linear_template)))
-            if res == z3.sat:
-                m = solver.model()
-                linear_expr = m.eval(linear_template)
+        # if len(linear_expr) == 0:
+        #     # set up linear template for each variable in x
+        #     for v in x:
+        #         all_vars = [var.n for var in get_vars(formula)]
+        #         vars = [var for var in all_vars if str(var) != str(x)] + [1]
+        #         coeffs = [sort('_%s_c%d' % (i)) for i in range(len(vars))]
+        #         linear_template = sum([c*v for c, v in zip(coeffs, vars)])
+        #     res = solver.check(z3.ForAll(all_vars, z3.Implies(formula, x == linear_template)))
+        #     if res == z3.sat:
+        #         m = solver.model()
+        #         linear_expr = m.eval(linear_template)
         if linear_expr is not None:
             linear_exprs.append(linear_expr)
-            premises.append(z3.simplify(z3.substitute(formula, (x, linear_expr))))
+            premises.append(z3.simplify(z3.substitute(formula, list(linear_expr.items()))))
         else:
             return None
     return ConditionalExpr(premises, linear_exprs)
     # return _pack_piecewise_sol(premises[:-1], linear_exprs)
 
+def to_eq(atom):
+    lhs, rhs = atom.children()
+    if z3.is_lt(atom):
+        return z3.simplify(lhs == rhs - 1)
+    if z3.is_gt(atom):
+        return z3.simplify(lhs == rhs + 1)
+    return z3.simplify(lhs == rhs)
+
 def _solve_linear_expr_heuristic(constraints, x):
     '''Assume constraints is a list of formulas, representing a conjunction.
        Compute x as a linear expression of other variables heuristically'''
     # all_vars = [var.n for var in get_vars(z3.And(*constraints)) ]
-    possible_exprs = _get_possible_exprs(constraints, x)
+    if len(x) == 0: return {}
+    possible_eqs = _get_possible_eqs(constraints, x)
     solver = z3.Solver()
-    for expr in possible_exprs:
-        res = solver.check(z3.And(z3.And(*constraints), z3.Not(x == to_z3(expr))))
+    eqs = []
+    print(possible_eqs)
+    for eq in possible_eqs:
+        res = solver.check(z3.And(z3.And(*constraints), z3.Not(to_z3(eq))))
         if res == z3.unsat:
-            return to_z3(expr)
-    return None
+            eqs.append(eq)
+        if len(eqs) == len(x):
+            break
+    res = sp.solve(eqs, [to_sympy(v) for v in x], dict=True)[0]
+    print(res)
+    print(eqs)
+    print('###'*10)
+    return {to_z3(v): to_z3(res[v]) for v in res}
 
-def _get_possible_exprs(constraints, x):
+def _get_possible_eqs(constraints, x):
     possible_formulas = []
     for formula in constraints:
         all_vars = get_vars(formula)
-        if str(x) in [str(var) for var in all_vars]:
+        if any(str(v) in [str(var) for var in all_vars] for v in x):
             possible_formulas.append(formula)
     # convert them into equations
     possible_formulas_sp = [to_sympy(formula) for formula in possible_formulas]
@@ -460,10 +514,10 @@ def _get_possible_exprs(constraints, x):
     possible_eqs = [sp.Eq(f.lhs, f.rhs) for f in possible_formulas_sp]\
                  + [sp.Eq(f.lhs, f.rhs + 1) for f in possible_formulas_sp]\
                  + [sp.Eq(f.lhs, f.rhs - 1) for f in possible_formulas_sp]
-    res = []
-    for eq in possible_eqs:
-        res.extend(sp.solve(eq, to_sympy(x), list=True))
-    return res
+    # res = []
+    # for eq in possible_eqs:
+    #     res.extend(sp.solve(eq, to_sympy(x), list=True))
+    return possible_eqs
 
 def _pack_piecewise_sol(premises, conclusions):
     k = len(conclusions)
@@ -549,6 +603,319 @@ def get_vars(f: z3.ExprRef):
     return r
 ################################################################################################
 
+def get_all_atoms(constraint):
+    '''Atoms are linear constraints.'''
+    def is_simple_expr(expr):
+        if z3.is_const(expr) or (z3.is_app(expr) and expr.decl().kind() == z3.Z3_OP_UNINTERPRETED):
+            return True
+        if z3.is_add(expr) or z3.is_sub(expr) or z3.is_mul(expr) or z3.is_div(expr):
+            if all([is_simple_expr(arg) for arg in expr.children()]):
+                return True
+        return False
+
+    def is_atom(a):
+        if z3.is_ge(a) or z3.is_lt(a) or z3.is_le(a) or z3.is_gt(a) or z3.is_eq(a):
+            if all([is_simple_expr(arg) for arg in a.children()]):
+                return True
+        return False
+
+    if is_atom(constraint):
+        return {z3.simplify(constraint)}
+    return reduce(set.union, [get_all_atoms(c) for c in constraint.children()], set())
+
+def transform_to_equalities(atoms):
+    '''Transform all extracted constraints to equalities.'''
+    equalities = set()
+    for atom in atoms:
+        if z3.is_ge(atom) or z3.is_le(atom) or z3.is_eq(atom) or z3.is_lt(atom) or z3.is_gt(atom):
+            equalities.add(z3.simplify(atom.arg(0) == atom.arg(1)))
+            equalities.add(z3.simplify(atom.arg(0) == atom.arg(1) + 1))
+            equalities.add(z3.simplify(atom.arg(0) == atom.arg(1) - 1))
+    return equalities
+
+# def solve_sol_piecewise_heuristic(constraints, x):
+#     '''Given a set of linear constraints, solve x as a piecewise linear expression of other variables heuristically
+#        by first finding all atoms in constraints and transform them into equalities to see if the constraints imply
+#        the disjunction of them.
+#        If so, compute the case for each equality, under which the equality holds.'''
+#     atoms = get_all_atoms(constraints)
+#     equalities = transform_to_equalities(atoms)
+#     disjunction = z3.Or(*equalities)
+#     solver = z3.Solver()
+#     solver.add(constraints)
+#     sat_res = solver.check(z3.Not(disjunction))
+#     if sat_res == z3.sat:
+#         return None
+#     qe = z3.Tactic('qe')
+#     _conditions = []
+#     _exprs = []
+#     for eq in equalities:
+#         constraint_without_x = qe(z3.ForAll(x, z3.Implies(constraints, eq)))
+#         case = z3.Or(*[z3.And(*c) for c in constraint_without_x])
+#         consistent_checker = z3.Solver()
+#         consistent_checker.add(constraints)
+#         consistent_checker.add(case)
+#         if consistent_checker.check() == z3.sat:
+#             _conditions.append(case)
+#             _exprs.append(eq)
+#     conditions = [_conditions[0]]
+#     eqs = [[_exprs[0]]]
+#     # traverse _conditions to remove redundant cases and merge the corresponding expressions
+#     for i, cond in enumerate(_conditions):
+#         for j, c in enumerate(conditions):
+#             if is_the_same_case(cond, c):
+#                 eqs[j].append(_exprs[i])
+#                 break
+#         else:
+#             conditions.append(cond)
+#             eqs.append([_exprs[i]])
+#     sim = z3.Tactic('ctx-solver-simplify')
+#     conditions = [z3.Or(*[z3.And(*a) for a in sim(c)]) for c in conditions]
+#     exprs = []
+#     for eq in eqs:
+#         exprs.append(solve_x(eq, x))
+#     # return ConditionalExpr(conditions, exprs)
+#     exprs_dict = {}
+#     for v in x:
+#         exprs_dict[v] = []
+#         for expr in exprs:
+#             exprs_dict[v].append(expr[v])
+#     return {v: ConditionalExpr(conditions, exprs_dict[v]) for v in exprs_dict}
+
+def formula2dnf(formula):
+    '''Convert formula to DNF by first booleanizing it and then converting it to sympy and then to DNF'''
+    atoms = get_all_atoms(formula)
+    tmp_solver = z3.Solver()
+    mapping = {}
+    cnt = 0
+    for i, atom1 in enumerate(atoms):
+        if atom1 in mapping: continue
+        for j, atom2 in enumerate(atoms):
+            # check if atom1 and atom2 are mutually exclusive
+            if i == j: continue
+            if tmp_solver.check(atom1, atom2) == z3.unsat and tmp_solver.check(z3.Not(z3.Or(atom1, atom2))) == z3.unsat:
+                mapping[atom2] = z3.Not(atom1)
+                # print(atom1, atom2)
+                cnt += 1
+            # check if atom1 and atom2 are equivalent
+            if tmp_solver.check(atom1, z3.Not(atom2)) == z3.unsat and tmp_solver.check(z3.Not(atom1), atom2) == z3.unsat:
+                mapping[atom2] = atom1
+                cnt += 1
+    formula = z3.substitute(formula, list(mapping.items()))
+    atoms = get_all_atoms(formula)
+    print(atoms)
+    atom_to_bool = {atom: z3.Bool('b_%d' % i) for i, atom in enumerate(atoms)}
+    boolean_formula = z3.substitute(formula, [(atom, atom_to_bool[atom]) for atom in atoms])
+    boolean_sp = to_sympy(boolean_formula, False)
+    # boolean_dnf = sp.to_dnf(boolean_sp, simplify=True, force=True)
+    # boolean_dnf = sp.to_dnf(boolean_sp)
+    boolean_dnf = sp.simplify_logic(boolean_sp, form='dnf', force=True)
+    print(boolean_dnf)
+    formula_dnf = to_z3(boolean_dnf, 'bool')
+    if not z3.is_or(formula_dnf):
+        formula_dnf = z3.Or(formula_dnf)
+    res = z3.substitute(formula_dnf, [(atom_to_bool[atom], atom) for atom in atoms])
+    return res
+
+def get_possible_eqs(constraint, x):
+    '''Get possible equations containing x in constraint by converting all atoms to equalities
+    @constraint: a z3 formula
+    @x: a list of variables'''
+
+    atoms = get_all_atoms(constraint)
+    equalities = transform_to_equalities(atoms)
+    # filter out those equalities not containing x
+    eqs = [eq for eq in equalities if any(v in get_vars(eq) for v in x)]
+    return eqs
+
+# def solve_piecewise(constraint, x):
+#     '''Solve x as a piecewise linear expression of other variables in constraint.
+#        The overall idea is that if \theta => x = f(y) under some case \phi free of x,
+#        it is equivalent to \theta ^ \phi => x = f(y).
+#        If \phi is a disjunction of \phi_1, \phi_2 ..., where \phi_i are conjunctions of atoms,
+#        then for each \phi_ij, we have \theta ^ \phi_i => x = f(y).
+#        Then \phi_i can be \theta{x/f(y)}.
+# 
+#        @constraint: any quantifier free z3 formula, which entails that variables in x are linear combinations of other variables
+#        @x: a list of variables
+#        @return: a piecewise solution for x'''
+#     # get possible equations for x
+#     print('testing')
+#     _eqs = get_possible_eqs(constraint, x)
+#     # get all equations entailed by constraint
+#     solver = z3.Solver()
+#     cases = []
+#     eqs = []
+#     qe = z3.Then(z3.Tactic('qe'), z3.Tactic('ctx-solver-simplify'))
+#     for eq in product(_eqs, repeat=len(x)):
+#         e = z3.ForAll(x, z3.Implies(constraint, z3.And(*eq)))
+#         case = z3.Or(*[z3.And(*c) for c in qe(e)])
+#         sat_res = solver.check(case)
+#         if sat_res == z3.sat:
+#             cases.append(case)
+#             eqs.append(eq)
+#     # solve x for each case
+#     sol = []
+#     for eq in eqs:
+#         sol.append(solve_x(eq, x))
+#     # collapse the solution
+#     original_cases = cases.copy()
+#     new_cases = []
+#     new_sol = []
+#     for i, case in enumerate(cases):
+#         case_index = _subsumed_by(constraint, i, cases)
+#         print(case_index)
+#         if case_index == -1:
+#             new_cases.append(cases[i])
+#             new_sol.append(sol[i])
+#     cases = new_cases
+#     sol = new_sol
+#     new_cases = []
+#     new_sol = []
+#     while True:
+#         for i, case in enumerate(cases):
+#             for j, c in enumerate(cases):
+#                 if i == j: continue
+#                 if _subsumed_by_eq(constraint, i, j, cases, sol):
+
+
+
+def _subsumed_by(constraint, i, cases):
+    '''Check if cases[i] is subsumed by some other case in cases under the constraint
+       @constraint: a z3 formula
+       @i: the index of the case to be checked
+       @cases: a list of z3 formulas
+       @return: if case is subsumed by some other case in cases, return the index of it, -1 otherwise'''
+
+    solver = z3.Solver()
+    solver.add(constraint)
+    for j, c in enumerate(cases[i + 1: ]):
+        res = solver.check(z3.And(cases[i], z3.Not(c)))
+        if res == z3.unsat:
+            return j
+    return -1
+
+def _subsumed_by_eq(constraint, i, j, cases, eqs):
+    '''Check if cases[i] is subsumed by cases[j] under the constraint by checking
+       if eqs[j] evaluated to the same value as eqs[i] under cases[i].
+       @constraint: a z3 formula
+       @i: the index of the first case
+       @j: the index of the second case
+       @cases: a list of z3 formulas
+       @eqs: a list of list of z3 formulas
+       @return: True if the ith and jth cases can be merged, False otherwise'''
+    solver = z3.Solver()
+    solver.add(constraint)
+    assert(len(eqs[i]) == len(eqs[j]))
+    evaluations = z3.And(*[eqs[i][x] == eqs[j][x] for x in eqs[j]])
+    res = solver.check(z3.And(cases[i], z3.Not(evaluations)))
+    if res == z3.unsat:
+        return True
+    return False
+
+        
+# def simplify_by_resolution(constraint):
+#     '''Simplify constraint by resolution
+#        @constraint: a z3 formula representing a boolean combination of linear constraints
+#        @return: a simplified constraint'''
+#     def resolve(clause1, clause2):
+#         '''Resolve two clauses'''
+#         def simplify_clause(clause):
+#             '''Simplify a clause'''
+#             s = z3.Solver()
+#             for i, lit1 in enumerate(clause):
+#                 for j, lit2 in enumerate(clause):
+#                     if i < j:
+#                         is_contradiction = s.check(z3.And(lit1, lit2)) == z3.unsat
+#                         if is_contradiction:
+#                             return []
+#             return clause
+# 
+#         s = z3.Solver()
+#         for i, lit1 in enumerate(clause1):
+#             for j, lit2 in enumerate(clause2):
+#                 if i >= j: continue
+#                 is_contradiction = s.check(z3.And(lit1, lit2)) == z3.unsat
+#                 if is_contradiction:
+#                     resolvent = [lit for lit in clause1 if lit is not lit1] + [lit for lit in clause2 if lit is not lit2]
+#                     simplified_resolvent = simplify_clause(resolvent)
+#                     # print("%s + %s => %s" % (clause1, clause2, simplified_resolvent))
+#                     if len(simplified_resolvent) > 0:
+#                         return simplified_resolvent
+#         return None
+#     # convert constraint to nnf and cnf
+#     cnf_constraint = z3.Then(z3.Tactic('nnf'), z3.Tactic('tseitin-cnf')).apply(constraint)
+#     # assert cnf_constraint has length of 1
+#     assert len(cnf_constraint) == 1
+#     cnf = cnf_constraint[0]
+#     # start resolution
+#     clauses = [clause_as_list(clause) for clause in cnf]
+#     cur_clauses = clauses.copy()
+#     while True:
+#         # cur_clauses = clauses.copy()
+#         resolved = set()
+#         new_clauses = []
+#         changed = False
+#         for i, clause1 in enumerate(cur_clauses):
+#             if i in resolved: continue
+#             resolvents = [resolve(clause1, clause2) for j, clause2 in enumerate(cur_clauses) if i < j]
+#             if any(resolvent is not None for resolvent in resolvents):
+#                 changed = True
+#                 for j, resolvent in enumerate(resolvents):
+#                     if resolvent is not None:
+#                         new_clauses.append(resolvent)
+#                         resolved.add(i)
+#                         resolved.add(i + j + 1)
+#         if not changed:
+#             break
+#         cur_clauses = [clause for i, clause in enumerate(cur_clauses) if i not in resolved]\
+#                     + [resolvent for resolvent in resolvents if resolvent is not None]
+#     return z3.simplify(z3.And(*[z3.Or(*clause) for clause in cur_clauses]))
+# 
+# def clause_as_list(disjunct):
+#     '''Convert a clause to a list of conjuncts'''
+#     if z3.is_or(disjunct):
+#         return list(disjunct.children())
+#     return [disjunct]
+# 
+# 
+# 
+# def is_the_same_case(case1, case2):
+#     '''Check whether case1 and case2 are the same case'''
+#     solver = z3.Solver()
+#     return solver.check(z3.And(case1, z3.Not(case2))) == z3.unsat and solver.check(z3.And(case2, z3.Not(case1))) == z3.unsat
+# 
+def solve_x(eqs, x):
+    '''Solve x, which is a list of variables, as a linear expression of other variables in eqs
+       by first converting eqs to sympy equations and then solve x as a linear expression of other variables.
+       Finally, convert the result back to z3.'''
+    x_sp = [to_sympy(var) for var in x]
+    eqs_sp = [to_sympy(eq) for eq in eqs]
+    A, _ = sp.linear_eq_to_matrix(eqs_sp, x_sp)
+    _, indices = A.T.rref()   # to check the rows you need to transpose!
+    reduced_eqs = [eqs_sp[i] for i in indices]
+    res = sp.solve(reduced_eqs, x_sp, dict=True)
+    if len(res) > 0:
+        return {to_z3(var): to_z3(res[0][var]) for var in res[0]}
+    else:
+        return {}
+
+def is_convex(constraints):
+    '''Check if the models of the constraints form a convex set'''
+    solver = z3.Solver()
+    solver.add(constraints)
+    t = z3.Real('t')
+    solver.add(z3.And(0 <= t, t <= 1))
+    vars = get_vars(constraints)
+    vars_p = [z3.Int('%s_p' % var) for var in vars]
+    vars_pp = [z3.Int('%s_pp' % var) for var in vars]
+    constraints_p = z3.substitute(constraints, list(zip(vars, vars_p)))
+    constraints_pp = z3.substitute(constraints, list(zip(vars, vars_pp)))
+    solver.add(constraints_p)
+    solver.add([v_pp == t*v + (1 - t)*v_p for v, v_p, v_pp in zip(vars, vars_p, vars_pp)])
+    solver.add(z3.Not(constraints_pp))
+    return solver.check() == z3.unsat
+
 if __name__ == '__main__':
     # x, y, z, q = z3.Ints('x y z q')
     # constraint = z3.Or(z3.And(q >= x + y, q <= x + y, x > 0, y > 0), z3.And(q >= 2*x, q <= 2*x, z3.Or(x <= 0, y <= 0)))
@@ -558,11 +925,15 @@ if __name__ == '__main__':
     from z3 import If, Or, And, Not
     e1 = If(Or(And(1 <= z, Not(0 <= c)), And(-1 == c, 1 <= z, Not(0 <= c)), And(1 <= z, Not(c <= -1), Not(c + -1*z <= -1))), z, -1 + z + -1*c) <= _d
     e2 = Or(And(1 <= z, Not(0 <= c)), And(-1 == c, 1 <= z, Not(0 <= c)), And(1 <= z, Not(c <= -1), Not(c + -1*z <= -1)))
-    dnf = z3.Then(to_cnf, to_dnf)
-    print(e1)
-    print(dnf(e1))
-    print(e2)
-    print(dnf(e2))
+    print(get_all_atoms(e1))
+    inequalties = get_all_atoms(e2)
+    equalities = transform_to_equalities(inequalties)
+    print(equalities)
+    # dnf = z3.Then(to_cnf, to_dnf)
+    # print(e1)
+    # print(dnf(e1))
+    # print(e2)
+    # print(dnf(e2))
     # sim = z3.Then(z3.Tactic('simplify'), z3.Tactic('solve-eqs'), z3.Tactic('ctx-solver-simplify'))
     # print(z3.simplify(z3.Or(*[z3.And(*conjunct) for conjunct in sim(e1)])))
     # print(z3.simplify(z3.Or(*[z3.And(*conjunct) for conjunct in sim(e2)])))

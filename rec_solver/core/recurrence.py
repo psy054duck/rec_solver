@@ -93,7 +93,8 @@ class Recurrence:
         solver = z3.Solver()
         if solver.check(acc_neg) == z3.sat:
             exclusive_conditions.append(acc_neg)
-        return exclusive_conditions
+        simplified = [utils.formula2dnf(cond) for cond in exclusive_conditions]
+        return simplified
 
     @staticmethod
     def get_initial(conditions, transitions, ind_var):
@@ -260,7 +261,8 @@ class MultiRecurrence:
             # rec_calls = case.recursive_calls
             # ops = tuple(op.subs(rec_calls, simultaneous=True) for op in case.op)
             this_recursive_calls = self._recursive_calls[len(self.get_base_cases()) + i]
-            ops = [utils.to_sympy(this_recursive_calls[op]) for op in case.op]
+            # ops = [utils.to_sympy(this_recursive_calls[op]) for op in case.op]
+            ops = [utils.to_sympy(z3.substitute(op, *list(this_recursive_calls.items()))) for op in case.op]
             try:
                 [op] = ops
             except ValueError:
@@ -380,7 +382,6 @@ class LoopRecurrence:
     def subs(self, mapping):
         # initial = {k: self.initial[k].subs(mapping, simultaneous=True) for k in self.initial}
         list_mapping = list(mapping.items())
-        print(type(list_mapping[0][1]))
         initial = {k: z3.substitute(self.initial[k], *list_mapping) for k in self.initial}
         # conditions = [c.subs(mapping, simultaneous=True) for c in self.conditions]
         conditions = [z3.substitute(c, *list_mapping) for c in self.conditions]

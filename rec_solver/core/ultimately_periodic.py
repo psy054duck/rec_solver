@@ -27,13 +27,17 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
     if rec.is_all_initialized():
         return solve_ultimately_periodic_initial(rec, bnd)
     while z3_solver.check(acc_condition) != z3.unsat:
-        print(acc_condition)
+        # print(acc_condition)
         i += 1
         model = z3_solver.model()
         parameters = rec.get_symbolic_values()
         cur_val = {p: model.eval(p, model_completion=True) for p in parameters}
         initialized_rec = rec.subs(cur_val)
         initialized_rec.pprint()
+        # print(initialized_rec.conditions)
+        tmp_solver = z3.Solver()
+        for cond in initialized_rec.conditions:
+            print(cond)
         _, index_seq = _solve_ultimately_periodic_initial(initialized_rec)
         qs = [z3.Int('q%d' % i) for i in range(len(index_seq) - 1)]
         # qs = sp.symbols('q:%d' % (len(index_seq) - 1), integer=True)
@@ -48,35 +52,48 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
         logger.debug('In the %dth iteration: the index sequence is %s' % (i, index_seq))
         logger.debug('In the %dth iteration: the set up index sequence template is %s' % (i, index_seq_temp))
         logger.debug('In the %dth iteration: the closed-form solution is\n%s' % (i, can_sol))
-        logger.debug('In the %dth iteration: the set up quantified constraint is\n%s' % (i, quantified_constraint))
-        logger.debug('In the %dth iteration: the set up constraint is\n%s' % (i, constraint))
+        # logger.debug('In the %dth iteration: the set up quantified constraint is\n%s' % (i, quantified_constraint))
+        # logger.debug('In the %dth iteration: the set up constraint is\n%s' % (i, constraint))
         # q_linear = [utils.compute_q(constraint, q, parameters, k) for q in qs]
-        q_linear = [utils.solve_piecewise_sol(constraint, q, sort=z3.Int) for q in qs]
+        print(qs)
+        # q_linear = [utils.solve_piecewise_sol(constraint, q, sort=z3.Int) for q in qs]
+        q_linear = utils.solve_piecewise_sol(constraint, qs, sort=z3.Int)
+        # tmp_linear = utils.solve_sol_piecewise_heuristic(constraint, qs)
+        # if len(qs) > 0:
+        #     utils.solve_piecewise(constraint, qs)
+        # if not all([len(q.conditions) == 1 for q in q_linear]):
+        #     print([len(q.conditions) for q in q_linear])
+        #     print([q.conditions for q in q_linear])
+        #     print([q.to_piecewise() for q in q_linear])
+        #     exit(0)
         # for q_conditional_exprs in product(*q_linear)
-        print([q.to_piecewise() for q in q_linear])
+        print(q_linear.to_piecewise())
         print('*'*10)
-        for q_constraint, q_sol in _unpack_q_expressions(q_linear):
-            constraint_no_q = z3.substitute(z3.And(constraint, q_constraint), *[(q, linear) for q, linear in zip(qs, q_sol)])
+        for q_constraint, q_sol in zip(q_linear.conditions, q_linear.expressions):
+            # constraint_no_q = z3.substitute(z3.And(constraint, q_constraint), *[(q, linear) for q, linear in zip(qs, q_sol)])
+            constraint_no_q = z3.substitute(z3.And(constraint, q_constraint), *[(q, q_sol[q]) for q in qs])
             qe = z3.Tactic('qe')
             forall_constraint = z3.ForAll(k, z3.Implies(k >= 0, constraint_no_q))
             constraint_no_kq = z3.simplify(z3.Or(*[z3.And(*conjunct) for conjunct in qe.apply(forall_constraint)]))
             constraints.append(constraint_no_kq)
             acc_condition = z3.And(acc_condition, z3.Not(constraint_no_kq))
             # mapping = {q: utils.to_sympy(linear) for q, linear in zip(qs, q_sol)}
-            mapping = {q: linear for q, linear in zip(qs, q_sol)}
+            # mapping = {q: linear for q, linear in zip(qs, q_sol)}
             # for q in mapping:
             #     symbols = mapping[q].free_symbols
             #     mapping[q] = mapping[q].subs({s: sp.Symbol(s.name, integer=True) for s in symbols}, simultaneous=True)
-            closed_forms.append(can_sol.simple_subs(mapping))
+            closed_forms.append(can_sol.simple_subs(q_sol))
     return SymbolicClosedForm(constraints, closed_forms, rec.ind_var)
 
-def _unpack_q_expressions(q_linear):
-    conditions = [conditional_e.conditions for conditional_e in q_linear]
-    expressions = [conditional_e.expressions for conditional_e in q_linear]
-    lengths = [len(conditional_e.conditions) for conditional_e in q_linear]
-    indices = [tuple(range(l)) for l in lengths]
-    for index in product(*indices):
-        yield z3.And(*[condition[i] for i, condition in zip(index, conditions)]), [expression[i] for i, expression in zip(index, expressions)]
+# def _unpack_q_expressions(q_linear):
+#     conditions = q_linear.conditions
+#     expressions = q_linear.expressions
+#     conditions = [conditional_e.conditions for conditional_e in q_linear]
+#     expressions = [conditional_e.expressions for conditional_e in q_linear]
+#     lengths = [len(conditional_e.conditions) for conditional_e in q_linear]
+#     indices = [tuple(range(l)) for l in lengths]
+#     for index in product(*indices):
+#         yield z3.And(*[condition[i] for i, condition in zip(index, conditions)]), [expression[i] for i, expression in zip(index, expressions)]
 
 def solve_ultimately_periodic_initial(rec: LoopRecurrence, bnd=100):
     closed_form, _ = _solve_ultimately_periodic_initial(rec, bnd)
@@ -249,8 +266,6 @@ def _set_up_constraints(rec: LoopRecurrence, closed_form: PiecewiseClosedForm, i
             mentioned_vars = utils.get_applied_functions(rec.conditions[j])
             closed_form_z3 = closed_form_component.selected_to_z3(mentioned_vars)
             mapping = [(kk, v) for kk, v in closed_form_z3.items()]
-            print(mapping)
-            print(j, rec.conditions[j])
             condition = z3.substitute(rec_conditions[j], *mapping)
             cur_constraint = z3.Implies(premise, condition)
             cur_constraint = z3.substitute(cur_constraint, (ind_var, period*k + r))
