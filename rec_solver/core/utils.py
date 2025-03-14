@@ -6,6 +6,7 @@ from sympy.core.function import UndefinedFunction
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, convert_equals_signs
 import z3
 from itertools import product
+from .logic_simplification import DNFConverter
 
 z3.set_option(max_depth=99999999)
 # z3.set_option(timeout=5)
@@ -45,6 +46,15 @@ class ConditionalExpr:
             res[-1] = (res[-1][0], True)
             ret[var] = sp.piecewise_fold(sp.Piecewise(*res))
         return ret
+
+    def to_z3(self):
+        res = {}
+        for var in self.vars:
+            res[var] = self.expressions[-1][var]
+            for cond, expr in zip(self.conditions[:-1], self.expressions[:-1]):
+                res[var] = z3.If(cond, expr[var], res[var])
+        return res
+
 
 def contains_function_symbols(expr):
     """
@@ -445,12 +455,14 @@ def solve_piecewise_sol(constraint, x, sort=z3.Real):
             if solver.check(z3.Not(eq)) == z3.unsat:
                 eqs.add(eq)
         return ConditionalExpr([z3.BoolVal(True)], [solve_x(eqs, x)])
-    dnf = formula2dnf(constraint)
-    for conjunct in dnf.children():
-        # formula = z3.And(*conjunct)
-        formula = conjunct
+    # dnf = formula2dnf(constraint)
+    dnf_converter = DNFConverter()
+    dnf = dnf_converter.to_dnf(constraint)
+    for conjunct in dnf:
+        formula = z3.And(*conjunct)
+        # formula = conjunct
         # try:
-        linear_expr = _solve_linear_expr_heuristic(conjunct.children(), x)
+        linear_expr = _solve_linear_expr_heuristic(conjunct, x)
         # except:
         #     linear_expr = None
         # if len(linear_expr) == 0:
@@ -488,13 +500,13 @@ def _solve_linear_expr_heuristic(constraints, x):
     possible_eqs = _get_possible_eqs(constraints, x)
     solver = z3.Solver()
     eqs = []
-    print(possible_eqs)
     for eq in possible_eqs:
         res = solver.check(z3.And(z3.And(*constraints), z3.Not(to_z3(eq))))
         if res == z3.unsat:
             eqs.append(eq)
         if len(eqs) == len(x):
             break
+    print(eqs)
     res = sp.solve(eqs, [to_sympy(v) for v in x], dict=True)[0]
     print(res)
     print(eqs)
@@ -502,11 +514,11 @@ def _solve_linear_expr_heuristic(constraints, x):
     return {to_z3(v): to_z3(res[v]) for v in res}
 
 def _get_possible_eqs(constraints, x):
-    possible_formulas = []
-    for formula in constraints:
-        all_vars = get_vars(formula)
-        if any(str(v) in [str(var) for var in all_vars] for v in x):
-            possible_formulas.append(formula)
+    possible_formulas = get_all_atoms(z3.And(constraints))
+    # for formula in constraints:
+    #     all_vars = get_vars(formula)
+    #     if any(str(v) in [str(var) for var in all_vars] for v in x):
+    #         possible_formulas.append(formula)
     # convert them into equations
     possible_formulas_sp = [to_sympy(formula) for formula in possible_formulas]
     possible_formulas_sp = [formula for formula in possible_formulas_sp if not isinstance(formula, sp.And)]\

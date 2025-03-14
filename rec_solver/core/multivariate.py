@@ -286,78 +286,28 @@ def unroll(call, rec) -> MultiRecurrence:
     unrolled_rec = rec.subs(unroll_mapping)
     return unrolled_rec
 
-# def eq_terms(target_call, pre_cond, rec: MultiRecurrence):
-#     unrolled_rec = unroll(target_call, rec)
-#     # base_conditions, base_post_ops = unrolled_rec.get_base_cases()
-#     base_cases = unrolled_rec.get_base_cases()
-#     # rec_conditions, recursive_calls, rec_post_ops = unrolled_rec.get_rec_cases()
-#     rec_cases = unrolled_rec.get_rec_cases()
-#     solver = z3.Solver()
-#     # for cond, ops in zip(base_conditions, base_post_ops):
-#     base_conditions = [case.condition for case in base_cases]
-#     for base_case in base_cases:
-#         cond = base_case.condition
-#         ops = base_case.op
-#         path_cond = pre_cond & sp.Not(reduce(sp.Or, base_conditions, sp.false)) & sp.Not(cond)
-#         path_cond_z3 = utils.to_z3(path_cond)
-#         res = solver.check(path_cond_z3)
-#         if res == z3.unsat:
-#             return {ops}
-#     # for cond, calls, ops in zip(rec_conditions, recursive_calls, rec_post_ops):
-#     for rec_case in rec_cases:
-#         cond = rec_case.condition
-#         calls = rec_case.recursive_calls
-#         ops = rec_case.op
-#         path_cond = pre_cond & sp.Not(reduce(sp.Or, base_conditions, sp.false)) & sp.Not(cond)
-#         path_cond_z3 = utils.to_z3(path_cond)
-#         res = solver.check(path_cond_z3)
-#         if res == z3.unsat:
-#             return {op.subs(calls, simultaneous=True) for op in ops} if set(ops) == set(calls.keys()) else set()
-
-
 def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
     assert(rec.is_nearly_tail())
     d = z3.Int('_d')
     D = z3.Int('_D')
-    # d = sp.Symbol('_d', integer=True)
-    # D = sp.Symbol('_D', integer=True)
-    # ret = sp.Symbol('_ret', integer=True)
-    # rets = sp.symbols('_ret:%d' % rec.number_ret(), integer=True)
     rets = z3.Ints(' '.join(['_ret%d' % i for i in range(rec.number_ret())]))
     loop_rec = nearly_tail2loop(rec, d, rets)
-    # loop_rec.pprint()
     loop_guard = get_loop_cond(rec, d)
     precondition = z3.BoolVal(True)
     if is_array:
         f = symbol2func(rec.func_sig.args[-1])
-        # loop_guards = [loop_guards, sp.Eq(f(d), 0)]
         loop_guard = z3.Or(loop_guard, z3.Eq(f(d), 0))
-        # precondition = z3.And(*[utils.to_z3(arg) >= 0 for arg in rec.func_sig.args])
     loop_closed_form = solve_ultimately_periodic_symbolic(loop_rec, precondition=precondition)
-    # loop_closed_form.pprint()
     loop_closed_form.pprint()
     piecewise_D = compute_piecewise_D(d, D, loop_guard, loop_closed_form, precondition)
     print('D = %s' % piecewise_D)
-    # sp.pprint(piecewise_D)
     scalar_closed_form = loop_closed_form.subs({d: piecewise_D})
-    # base_conditions, base_post_ops = rec.get_base_cases()
     branches_rets = [[] for _ in range(len(rets))]
-    # for cond, ops in zip(base_conditions, base_post_ops):
-    import sympy as sp
-    c, z = z3.Ints('c z')
-    for i in range(4):
-        for j in range(4):
-            print('a(%d, %d) = %s' % (i, j, z3.simplify(z3.substitute(piecewise_D, (c, z3.IntVal(i)), (z, z3.IntVal(j))))))
     for base_case in rec.get_base_cases():
         cond = base_case.condition
         ops = base_case.op
-        # args = cond.free_symbols | reduce(set.union, [op.free_symbols for op in ops])
         args = utils.get_vars(cond) | reduce(set.union, [utils.get_vars(op) for op in ops])
         symbol2func_mapping = {arg: symbol2func(arg)(d) for arg in args}
-        # op_funcs = (op.subs(symbol2func_mapping, simultenoues=True) for op in ops)
-        # cond_func = cond.subs(symbol2func_mapping, simultaneous=True)
-        # ops_D = (op_func.subs(scalar_closed_form.sympify(), simultaneous=True) for op_func in op_funcs)
-        # cond_D = cond_func.subs(scalar_closed_form.sympify(), simultaneous=True)
         op_funcs = (z3.substitute(op, *list(symbol2func_mapping.items())) for op in ops)
         cond_func = z3.substitute(cond, *list(symbol2func_mapping.items()))
         ops_D = (z3.substitute(op_func, *list(scalar_closed_form.as_dict().items())) for op_func in op_funcs)
@@ -366,13 +316,9 @@ def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
             branches.append((op_D, cond_D))
     for branches in branches_rets:
         branches[-1] = (branches[-1][0], True)
-    # ret0 = sp.piecewise_fold(sp.Piecewise(*branches))
-    # rets0 = [sp.piecewise_fold(sp.Piecewise(*branches)) for branches in branches_rets]
     rets0 = [utils.to_ite(branches) for branches in branches_rets]
     closed_form_dict = scalar_closed_form.as_dict()
-    # return [sp.piecewise_fold(closed_form_dict[symbol2func(ret)(d)].subs({ret: ret0})) for ret, ret0 in zip(rets, rets0)]
     mapping = {ret: ret0 for ret, ret0 in zip(rets, rets0)}
-    # return [sp.piecewise_fold(closed_form_dict[symbol2func(ret)(d)].subs(mapping)) for ret in rets]
     return [z3.substitute(closed_form_dict[symbol2func(ret)(d)], *list(mapping.items())) for ret in rets]
 
 def nearly_tail2loop(rec: MultiRecurrence, d, rets):
@@ -427,51 +373,16 @@ def compute_piecewise_D(d, D, loop_cond, loop_closed_form, precondition):
     d_z3 = d
     D_z3 = D
     branches = []
-    # for i, (case, closed) in enumerate(zip(loop_closed_form.cases, loop_closed_form.closed_forms)):
     hints = []
-    # all_cases = loop_closed_form.cases
-    # for i, (closed, case) in enumerate(all_cases):
     for i, (cur_case, closed) in enumerate(zip(loop_closed_form._constraints, loop_closed_form._closed_forms)):
-        # sp.pprint(closed.sympify())
         logger.debug('Handling case %d/%d' % (i + 1, len(loop_closed_form._constraints)))
-        # loop_cond = sp.Or(*loop_conds)
-        # for loop_cond in loop_conds:
-        # terminate_cond = loop_cond.subs(closed.sympify(), simultaneous=True)
         terminate_cond = z3.substitute(loop_cond, *list(closed.as_dict().items()))
-        # terminate_cond = sp.piecewise_exclusive(sp.piecewise_fold(terminate_cond), skip_nan=True)
-        # sp_case = utils.to_sympy(case)
-        # cases = gen_cases(d_z3, D_z3, z3.Not(terminate_cond), case)
-        # for c in cases:
-        #     # cur_case = case & utils.to_sympy(z3.And(*c))
-        #     cur_case = z3.simplify(z3.And(case, *c))
-        #     cur_D = compute_D_by_case(d_z3, D_z3, z3.Not(terminate_cond), cur_case)
-        #     print(cur_D)
-        #     branches.append((cur_D, cur_case))
         cur_D = compute_D_by_case(d_z3, D_z3, z3.Not(terminate_cond), cur_case, hints)
         if cur_D is not None:
             hints.append(cur_D)
             branches.append((cur_D, cur_case))
     branches[-1] = (branches[-1][0], True)
-    # return z3.simplify(z3.Piecewise(*branches))
     return z3.simplify(utils.to_ite(branches))
-
-# def gen_cases(d, D, loop_cond, case):
-#     cond = loop_cond
-#     case_z3 = case
-# 
-#     axioms = set()
-#     axioms.add(case_z3)
-#     axioms.add(z3.ForAll([d], z3.Implies(z3.And(0 <= d, d < D), cond)))
-#     axioms.add(z3.substitute(z3.Not(cond), (d, D)))
-#     axioms.add(D >= 0)
-# 
-#     qe = z3.Then(z3.With(z3.Tactic('simplify'), elim_ite=True), z3.Tactic('qe'), z3.Tactic('ctx-solver-simplify'))
-#     constraints = z3.Or(*[z3.And(*conjunct) for conjunct in qe(z3.And(*axioms))])
-#     cases = z3.Then(qe, utils.to_dnf)(z3.Exists(D, constraints))
-#     common_conds = reduce(set.intersection, [set(c) for c in cases])
-#     reduced_cases = [set(c) - common_conds for c in cases]
-#     return reduced_cases
-
 
 def compute_D_by_case(d, D, loop_cond, case, hints):
     '''Assume D is linear under the case'''
@@ -479,57 +390,18 @@ def compute_D_by_case(d, D, loop_cond, case, hints):
     case_z3 = case
     axioms = set()
     # smallest D that violates the loop condition
-    # z3.set_option(html_mode=True)
-    # print(z3.simplify(loop_cond))
     axioms.add(case_z3)
     axioms.add(z3.ForAll([d], z3.Implies(z3.And(0 <= d, d < D), cond)))
     axioms.add(z3.substitute(z3.Not(cond), (d, D)))
     axioms.add(D >= 0)
 
-    # first apply QE and assume that the result is linear
     qe = z3.Tactic('qe')
-    # constraints = z3.And(*qe(z3.And(*axioms))[0])
     constraints = z3.simplify(z3.Or(*[z3.And(*c) for c in qe(z3.And(*axioms))]))
-    feasibility_checker = z3.Solver()
-    # feasibility_checker.add(constraints)
-    if feasibility_checker.check(constraints) == z3.unsat:
-        return None
-    for hint in hints:
-        hint_solver = z3.Solver()
-        hint_solver.add(constraints)
-        sat_res = hint_solver.check(D != hint)
-        if sat_res == z3.unsat:
-            return hint
-    # sp_constraints = sp.simplify(utils.to_sympy(constraints))
-    # sp_D = utils.to_sympy(D)
-    solver = z3.Solver()
-    # args = [utils.to_z3(s) for s in loop_cond.free_symbols | case.free_symbols]
-    args = list(utils.get_vars(loop_cond) | utils.get_vars(case))
-    coeffs = [z3.Int('_c%d' % i) for i in range(len(args))]
-    affine_term = z3.Int('_c%d' % len(args))
-    linear_comb = sum([c*a for c, a in zip(coeffs, args)]) + affine_term
-    deno = z3.Int('_deno')
-    solver = z3.Solver()
-    # solver.add(case)
-    solver.add(deno != 0)
-    print(utils.is_convex(constraints))
-    solver.add(z3.ForAll(args + [D], z3.Implies(constraints, deno*D == linear_comb)))
-    # print(solver)
-    bnd = 5
-    #TODO if constraints are assumed to be linear,
-    #     then this query should also be linear by farkas lemma
-    for _ in range(bnd):
-        print('hhh')
-        res = solver.check()
-        print('hhhhhh')
-        if res == z3.sat or res == z3.unsat:
-            break
-    if res == z3.sat:
-        m = solver.model()
-    else:
-        raise Exception('cannot compute D')
-    ret = m.eval(linear_comb/deno)
-    return ret
+    sol = utils.solve_piecewise_sol(constraints, [D], z3.Int)
+    try:
+        return sol.to_z3()[D]
+    except:
+        return z3.IntVal(0)
 
 def symbol2func(sym):
     return z3.Function(sym.decl().name(), z3.IntSort(), z3.IntSort())

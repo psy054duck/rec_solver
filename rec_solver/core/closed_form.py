@@ -2,6 +2,7 @@ import z3
 import sympy as sp
 from . import utils
 from collections import defaultdict
+from .logic_simplification import DNFConverter
 # z3.set_option(max_depth=99999999, max_args=9999999, max_width=999999999, max_lines=99999999, max_indent=99999999)
 
 class PeriodicClosedForm:
@@ -227,6 +228,7 @@ class SymbolicClosedForm:
         self._ind_var = ind_var
         self._reorder()
         self._simplify_constraints()
+        self._simplify()
         # assert(self._check_consistant())
 
     def _reorder(self):
@@ -241,8 +243,17 @@ class SymbolicClosedForm:
         res = solver.check(z3.Not(z3.Or(*self._constraints)))
         return res == z3.unsat
 
+    def _simplify(self):
+        pass
+
     def _simplify_constraints(self):
         self._constraints[-1] = z3.Not(z3.Or(False, *self._constraints[:-1]))
+        new_constraints = []
+        for constraint in self._constraints:
+            dnf_converter = DNFConverter()
+            new_constraint = z3.Or([z3.And(c) for c in dnf_converter.to_dnf(constraint)])
+            new_constraints.append(new_constraint)
+        self._constraints = new_constraints
 
     def __str__(self):
         res = ''
