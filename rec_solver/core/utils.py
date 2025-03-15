@@ -6,7 +6,7 @@ from sympy.core.function import UndefinedFunction
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, convert_equals_signs
 import z3
 from itertools import product
-from .logic_simplification import DNFConverter
+from .logic_simplification import DNFConverter, equals
 
 z3.set_option(max_depth=99999999)
 # z3.set_option(timeout=5)
@@ -458,6 +458,7 @@ def solve_piecewise_sol(constraint, x, sort=z3.Real):
     # dnf = formula2dnf(constraint)
     dnf_converter = DNFConverter()
     dnf = dnf_converter.to_dnf(constraint)
+    
     for conjunct in dnf:
         formula = z3.And(*conjunct)
         # formula = conjunct

@@ -2,7 +2,7 @@ import z3
 import sympy as sp
 from . import utils
 from collections import defaultdict
-from .logic_simplification import DNFConverter
+from .logic_simplification import DNFConverter, equals
 # z3.set_option(max_depth=99999999, max_args=9999999, max_width=999999999, max_lines=99999999, max_indent=99999999)
 
 class PeriodicClosedForm:
@@ -252,6 +252,10 @@ class SymbolicClosedForm:
         for constraint in self._constraints:
             dnf_converter = DNFConverter()
             new_constraint = z3.Or([z3.And(c) for c in dnf_converter.to_dnf(constraint)])
+            if not equals(new_constraint, constraint):
+                print(constraint)
+                print(new_constraint)
+                exit(0)
             new_constraints.append(new_constraint)
         self._constraints = new_constraints
 

@@ -32,7 +32,7 @@ def is_atom(t):
     k = t.decl().kind()
     if k == z3.Z3_OP_AND or k == z3.Z3_OP_OR or k == z3.Z3_OP_IMPLIES:
         return False
-    if k == z3.Z3_OP_EQ and t.arg(0).is_bool():
+    if k == z3.Z3_OP_EQ and z3.is_bool(t.arg(0)):
         return False
     if k == z3.Z3_OP_TRUE or k == z3.Z3_OP_FALSE or k == z3.Z3_OP_XOR or k == z3.Z3_OP_NOT:
         return False
@@ -62,8 +62,9 @@ class DNFConverter:
             return [[f]]
         args = [self._to_dnf(arg) for arg in f.children()]
         if z3.is_and(f):
-            args_as_and = [self.disjunction2z3(arg) for arg in args]
-            simplified_args = [self.or2list(c) for c in self.simplify_and(args_as_and)]
+            args_as_and = [self.disjunction2z3(arg) for arg in args if len(arg) != 0]
+            simplified_list = [c for c in self.simplify_and(args_as_and)]
+            simplified_args = [self.or2list(c) for c in simplified_list]
             new_disjunction = []
             for conjunctions in product(*simplified_args):
                 new_disjunction.append(self.simplify_and(sum(conjunctions, [])))
@@ -86,20 +87,23 @@ class DNFConverter:
             rest = self.conjunction2z3(rest_conjunctions)
             if implies(rest, conjunct):
                 removed.append(i)
-        return [conjunct for i, conjunct in enumerate(conjunction) if i not in removed]
+        res = [conjunct for i, conjunct in enumerate(conjunction) if i not in removed]
+        assert(equals(self.conjunction2z3(res), self.conjunction2z3(conjunction)))
+        return res
     
     def simplify_or(self, disjunction):
         removed = []
         if is_tautology(self.disjunction2z3(disjunction)):
-            return [[]]
+            return [[z3.BoolVal(True)]]
 
         for i, disjunct in enumerate(disjunction):
             rest_disjunction = [d for j, d in enumerate(disjunction) if j != i and j not in removed]
             rest = self.disjunction2z3(rest_disjunction)
             if implies(self.conjunction2z3(disjunct), rest):
                 removed.append(i)
-
-        return [self.simplify_and(disjunct) for i, disjunct in enumerate(disjunction) if i not in removed]
+        res = [self.simplify_and(disjunct) for i, disjunct in enumerate(disjunction) if i not in removed]
+        assert(equals(self.disjunction2z3(res), self.disjunction2z3(disjunction)))
+        return res
 
 if __name__ == '__main__':
     from z3 import *
