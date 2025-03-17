@@ -139,17 +139,22 @@ def is_linear(expr, terms):
 
 def get_app(expr):
     '''Get applications (with symbolic arguments) and symbols from "expr"'''
-    try:
-        args = expr.children()
-    except:
-        args = set()
     decl = expr.decl()
-    if decl.kind() != z3.Z3_OP_UNINTERPRETED:
-        return set()
-    # if (isinstance(expr.func, UndefinedFunction) and not any(arg.is_number for arg in args)) or expr.is_Symbol:
-    if any(arg.decl().kind() == z3.Z3_OP_UNINTERPRETED for arg in args):
-        return {expr}
+    args = expr.children()
+    if decl.kind() == z3.Z3_OP_UNINTERPRETED:
+        if any(arg.decl().kind() == z3.Z3_OP_UNINTERPRETED for arg in args):
+            return {expr} | reduce(set.union, [get_app(arg) for arg in args], set())
     return reduce(set.union, [get_app(arg) for arg in args], set())
+    # try:
+    #     args = expr.children()
+    # except:
+    #     args = set()
+    # if decl.kind() != z3.Z3_OP_UNINTERPRETED:
+    #     return set()
+    # if (isinstance(expr.func, UndefinedFunction) and not any(arg.is_number for arg in args)) or expr.is_Symbol:
+    # if any(arg.decl().kind() == z3.Z3_OP_UNINTERPRETED for arg in args):
+    #     return {expr}
+    # return reduce(set.union, [get_app(arg) for arg in args], set())
 
 def get_func_decls(expr):
     apps = get_app(expr)
@@ -505,7 +510,8 @@ def _solve_linear_expr_heuristic(constraints, x):
         res = solver.check(z3.And(z3.And(*constraints), z3.Not(to_z3(eq))))
         if res == z3.unsat:
             eqs.append(eq)
-        if len(eqs) == len(x):
+        all_mentioned_symbols = reduce(set.union, [set(eq.free_symbols) for eq in eqs], set())
+        if len(eqs) == len(x) and len(set(x).intersection(all_mentioned_symbols) - set(x)) == 0:
             break
     print(eqs)
     res = sp.solve(eqs, [to_sympy(v) for v in x], dict=True)[0]

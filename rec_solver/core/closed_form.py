@@ -1,8 +1,10 @@
 import z3
 import sympy as sp
+from sympy.utilities.iterables import strongly_connected_components
 from . import utils
 from collections import defaultdict
 from .logic_simplification import DNFConverter, equals
+from functools import reduce
 # z3.set_option(max_depth=99999999, max_args=9999999, max_width=999999999, max_lines=99999999, max_indent=99999999)
 
 class PeriodicClosedForm:
@@ -66,18 +68,6 @@ class PeriodicClosedForm:
     def get_rth_part_closed_form(self, r):
         return self._closed_form_list[r]
 
-    # def to_z3(self):
-    #     ind_var_z3 = utils.to_z3(self.ind_var)
-    #     closed_form_z3_list = [self._to_z3(closed) for closed in self._closed_form_list]
-    #     res = {}
-    #     for var in self.all_vars:
-    #         var_z3 = utils.to_z3(var)
-    #         expr_z3 = closed_form_z3_list[-1][var_z3]
-    #         for i, closed in enumerate(closed_form_z3_list[:-1]):
-    #             expr_z3 = z3.If(ind_var_z3 % self.period == i, closed[var_z3], expr_z3)
-    #         res[var_z3] = z3.simplify(expr_z3)
-    #     return res
-
     def to_z3(self):
         return self.selected_to_z3(self.all_vars)
 
@@ -122,6 +112,19 @@ class PeriodicClosedForm:
     @property
     def closed_forms(self) -> list[dict]:
         return self._closed_form_list
+
+    @property
+    def flatten_conditions(self):
+        if self.period == 1:
+            yield z3.BoolVal(True)
+        else:
+            for i in range(self.period):
+                yield self.ind_var % self.period == i
+
+    @property
+    def flatten_closed_forms(self):
+        for closed in self._closed_form_list:
+            yield closed
 
 class PiecewiseClosedForm:
     def __init__(self, conditions=[], closed_forms=[], ind_var=sp.Symbol('n', integer=True)):
@@ -221,6 +224,18 @@ class PiecewiseClosedForm:
         except:
             return set()
 
+    @property
+    def flatten_conditions(self):
+        for case, closed in zip(self._conditions, self._closed_forms):
+            for cond in closed.flatten_conditions:
+                yield z3.And(case, cond)
+
+    @property
+    def flatten_closed_forms(self):
+        for closed in self._closed_forms:
+            for c in closed.flatten_closed_forms:
+                yield c
+
 class SymbolicClosedForm:
     def __init__(self, constraints, closed_forms, ind_var):
         self._constraints = constraints
@@ -228,6 +243,8 @@ class SymbolicClosedForm:
         self._ind_var = ind_var
         self._reorder()
         self._simplify_constraints()
+        self._flatten_conditions = None
+        self._flatten_closed_forms = None
         self._simplify()
         # assert(self._check_consistant())
 
@@ -238,13 +255,36 @@ class SymbolicClosedForm:
         self._constraints[longest_idx], self._constraints[-1] = self._constraints[-1], self._constraints[longest_idx]
         self._closed_forms[longest_idx], self._closed_forms[-1] = self._closed_forms[-1], self._closed_forms[longest_idx]
 
+    def _simplify(self):
+        merged = defaultdict(set)
+        conditions = self.flatten_conditions
+        closed_forms = self.flatten_closed_forms
+        for i, (cond_replaced, closed_replaced) in enumerate(zip(conditions, closed_forms)):
+            for j, closed_match in enumerate(closed_forms):
+                # if i == j or any((j in s) for s in merged.values()): continue
+                if i == j: continue
+                if all(equals(v == closed_replaced[v], v == closed_match[v], cond_replaced) for v in closed_replaced):
+                    merged[j].add(i)
+        V = list(range(len(conditions)))
+        E = sum([[(i, j) for j in merged[i]] for i in merged], [])
+        res_conditions = []
+        res_closed_forms = []
+        converter = DNFConverter()
+        for component in strongly_connected_components((V, E)):
+            any_idx = component[0]
+            cur_cond = z3.Or([conditions[i] for i in component])
+            simplified = z3.Or([z3.And(c) for c in converter.to_dnf(cur_cond)])
+            simplified = z3.Or([z3.And(c) for c in converter.to_dnf(simplified)])
+            cur_closed = closed_forms[any_idx]
+            res_conditions.append(z3.simplify(simplified))
+            res_closed_forms.append(cur_closed)
+        self._flatten_conditions = res_conditions
+        self._flatten_closed_forms = res_closed_forms
+
     def _check_consistant(self):
         solver = z3.Solver()
         res = solver.check(z3.Not(z3.Or(*self._constraints)))
         return res == z3.unsat
-
-    def _simplify(self):
-        pass
 
     def _simplify_constraints(self):
         self._constraints[-1] = z3.Not(z3.Or(False, *self._constraints[:-1]))
@@ -252,10 +292,6 @@ class SymbolicClosedForm:
         for constraint in self._constraints:
             dnf_converter = DNFConverter()
             new_constraint = z3.Or([z3.And(c) for c in dnf_converter.to_dnf(constraint)])
-            if not equals(new_constraint, constraint):
-                print(constraint)
-                print(new_constraint)
-                exit(0)
             new_constraints.append(new_constraint)
         self._constraints = new_constraints
 
@@ -362,6 +398,30 @@ class SymbolicClosedForm:
             return self._closed_forms[0].all_vars
         except:
             return set()
+
+    @property
+    def flatten_conditions(self):
+        if self._flatten_conditions is not None:
+            return self._flatten_conditions
+
+        res = []
+        for case, closed in zip(self._constraints, self._closed_forms):
+            for cond in closed.flatten_conditions:
+                res.append(z3.And(case, cond))
+        self._flatten_conditions = res
+        return res
+
+    @property
+    def flatten_closed_forms(self):
+        if self._flatten_closed_forms is not None:
+            return self._flatten_closed_forms
+
+        res = []
+        for closed in self._closed_forms:
+            for c in closed.flatten_closed_forms:
+                res.append(c)
+        self._flatten_closed_forms = res
+        return res
 
 class ExprClosedForm:
     def __init__(self, closed_forms, ind_var):

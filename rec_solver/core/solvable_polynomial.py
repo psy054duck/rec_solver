@@ -83,8 +83,9 @@ def gen_polynomial_template_for_degree(ind_var, degr, name=""):
     return template, list(coeffs)
 
 def z3_pow(expr, p):
-    assert(isinstance(p, int) or expr == 1)
+    assert(isinstance(p, int) or expr == 1 or expr == -1)
     if expr == 1: return expr
+    if expr == -1 and not isinstance(p, int): return z3.If(p % 2 == 0, 1, -1)
     res = 1
     for _ in range(p):
         res += expr

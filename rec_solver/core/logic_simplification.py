@@ -3,15 +3,16 @@
 import z3
 from itertools import product
 
-def equals(f1, f2):
-    '''Check if two expressions are logically equivalent.'''
-    left2right = implies(f1, f2)
-    right2left = implies(f2, f1)
+def equals(f1, f2, case=z3.BoolVal(True)):
+    '''Check if two expressions are logically equivalent under the case.'''
+    left2right = implies(f1, f2, case)
+    right2left = implies(f2, f1, case)
     return left2right and right2left
 
-def implies(f1, f2):
-    '''Check if f1 implies f2.'''
+def implies(f1, f2, case=z3.BoolVal(True)):
+    '''Check if f1 implies f2 under the case.'''
     solver = z3.Solver()
+    solver.add(case)
     return solver.check(f1, z3.Not(f2)) == z3.unsat
 
 def is_valid(f):
@@ -41,12 +42,42 @@ def is_atom(t):
 def is_literal(f):
     return is_atom(f) or z3.is_not(f) and is_atom(f.arg(0))
 
+def get_vars(f: z3.ExprRef):
+    '''f: a formula in z3
+       ret: set of all variables in f'''
+    r = set()
+    def collect(f):
+      if z3.is_const(f): 
+          if f.decl().kind() == z3.Z3_OP_UNINTERPRETED:
+              r.add(f)
+      else:
+          for c in f.children():
+              collect(c)
+    collect(f)
+    return r
+
 class DNFConverter:
     def __init__(self):
         pass
 
     def to_dnf(self, f):
         nnf = z3.Or([z3.And(*c) for c in z3.Tactic('nnf').apply(f)])
+        vars = get_vars(nnf)
+        if any('!' in str(var) for var in vars):
+            solver = z3.Solver()
+            fresh_vars = [var for var in vars if str(var).startswith('z3name')]
+            observers = {var: z3.Int('observer%d' % i) for i, var in enumerate(fresh_vars)}
+            solver.add([observers[var] == var for var in fresh_vars])
+            if solver.check(nnf) == z3.sat:
+                m = solver.model()
+                for var in fresh_vars:
+                    m_var = m.eval(observers[var])
+                    if solver.check(nnf, var != m_var) == z3.unsat:
+                        nnf = z3.substitute(nnf, (var, m_var))
+        temp_vars = [var for var in vars if '!' in str(var)]
+        cons = {z3.IntSort(): z3.Int, z3.BoolSort(): z3.Bool, z3.RealSort(): z3.Real}
+        name_mapping = [(var, cons[var.sort()](str(var).replace('!', '_'))) for var in temp_vars]
+        nnf = z3.substitute(nnf, name_mapping)
         raw_dnf = self._to_dnf(nnf)
         return raw_dnf
 

@@ -4,6 +4,7 @@ from . import utils
 import z3
 from functools import reduce
 from collections import defaultdict
+from .logic_simplification import DNFConverter
 
 class Recurrence:
     def __new__(cls, branches):
@@ -93,7 +94,10 @@ class Recurrence:
         solver = z3.Solver()
         if solver.check(acc_neg) == z3.sat:
             exclusive_conditions.append(acc_neg)
-        simplified = [utils.formula2dnf(cond) for cond in exclusive_conditions]
+        # simplified = [utils.formula2dnf(cond) for cond in exclusive_conditions]
+        simplifier = DNFConverter()
+        simplified = [z3.Or([z3.And(c) for c in simplifier.to_dnf(cond)]) for cond in exclusive_conditions]
+        simplified = [z3.simplify(c) for c in simplified]
         return simplified
 
     @staticmethod
@@ -333,9 +337,10 @@ class LoopRecurrence:
         self._initial = initial
         app = self.get_app()
         last_args = {a.children()[-1] for a in app if not a.decl().kind() != z3.Z3_OP_UNINTERPRETED}
-        if len(last_args) != 1:
+        if len(last_args) > 1:
             raise Exception("More than one induction variable")
         self._ind_var = last_args.pop()
+        print(self._ind_var)
         self._transitions = self._padding_transitions(self._transitions, self.all_funcs)
         self._func_decls = self._get_all_func_decl()
         zero_indexed_func_apps = [func_decl(0) for func_decl in self.func_decls if func_decl.arity() == 1]
@@ -589,6 +594,7 @@ class LoopRecurrence:
     def is_standard(self):
         '''Check whether this recurrence is in the standard form.
            By standard form, we mean in the transitions, left-hand sides are all of form f(..., n+1) and right-hand sides are all of form f(..., n).'''
+        solver = z3.Solver()
         ind_var = self.ind_var
         for trans in self.transitions:
             for lhs, rhs in trans.items():

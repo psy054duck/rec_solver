@@ -298,7 +298,7 @@ def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
         f = symbol2func(rec.func_sig.args[-1])
         loop_guard = z3.Or(loop_guard, z3.Eq(f(d), 0))
     loop_closed_form = solve_ultimately_periodic_symbolic(loop_rec, precondition=precondition)
-    loop_closed_form.pprint()
+    # loop_closed_form.pprint()
     piecewise_D = compute_piecewise_D(d, D, loop_guard, loop_closed_form, precondition)
     print('D = %s' % piecewise_D)
     scalar_closed_form = loop_closed_form.subs({d: piecewise_D})
