@@ -511,13 +511,12 @@ def _solve_linear_expr_heuristic(constraints, x):
         if res == z3.unsat:
             eqs.append(eq)
         all_mentioned_symbols = reduce(set.union, [set(eq.free_symbols) for eq in eqs], set())
-        if len(eqs) == len(x) and len(set(x).intersection(all_mentioned_symbols) - set(x)) == 0:
+        all_mentioned_symbols = {to_z3(v) for v in all_mentioned_symbols}
+        if len(eqs) == len(x) and len(set(x) - set(x).intersection(all_mentioned_symbols)) == 0:
             break
+    print(x)
     print(eqs)
     res = sp.solve(eqs, [to_sympy(v) for v in x], dict=True)[0]
-    print(res)
-    print(eqs)
-    print('###'*10)
     return {to_z3(v): to_z3(res[v]) for v in res}
 
 def _get_possible_eqs(constraints, x):
@@ -722,14 +721,12 @@ def formula2dnf(formula):
                 cnt += 1
     formula = z3.substitute(formula, list(mapping.items()))
     atoms = get_all_atoms(formula)
-    print(atoms)
     atom_to_bool = {atom: z3.Bool('b_%d' % i) for i, atom in enumerate(atoms)}
     boolean_formula = z3.substitute(formula, [(atom, atom_to_bool[atom]) for atom in atoms])
     boolean_sp = to_sympy(boolean_formula, False)
     # boolean_dnf = sp.to_dnf(boolean_sp, simplify=True, force=True)
     # boolean_dnf = sp.to_dnf(boolean_sp)
     boolean_dnf = sp.simplify_logic(boolean_sp, form='dnf', force=True)
-    print(boolean_dnf)
     formula_dnf = to_z3(boolean_dnf, 'bool')
     if not z3.is_or(formula_dnf):
         formula_dnf = z3.Or(formula_dnf)

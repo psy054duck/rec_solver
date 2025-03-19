@@ -51,7 +51,6 @@ def p_term_div(p):
 def p_term_mod(p):
     '''term : term MOD factor'''
     p[0] = p[1] % p[3]
-    print(p[0])
 
 def p_term_factor(p):
     '''term : factor'''

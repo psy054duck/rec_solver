@@ -242,7 +242,7 @@ class SymbolicClosedForm:
         self._closed_forms = closed_forms
         self._ind_var = ind_var
         self._reorder()
-        self._simplify_constraints()
+        # self._simplify_constraints()
         self._flatten_conditions = None
         self._flatten_closed_forms = None
         self._simplify()

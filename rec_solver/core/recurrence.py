@@ -336,11 +336,12 @@ class LoopRecurrence:
             self._transitions = [branch[1] for branch in branches] + [{}]
         self._initial = initial
         app = self.get_app()
+        # print(app)
         last_args = {a.children()[-1] for a in app if not a.decl().kind() != z3.Z3_OP_UNINTERPRETED}
         if len(last_args) > 1:
             raise Exception("More than one induction variable")
         self._ind_var = last_args.pop()
-        print(self._ind_var)
+        # print(self._ind_var)
         self._transitions = self._padding_transitions(self._transitions, self.all_funcs)
         self._func_decls = self._get_all_func_decl()
         zero_indexed_func_apps = [func_decl(0) for func_decl in self.func_decls if func_decl.arity() == 1]

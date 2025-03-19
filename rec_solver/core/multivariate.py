@@ -300,7 +300,7 @@ def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
     loop_closed_form = solve_ultimately_periodic_symbolic(loop_rec, precondition=precondition)
     # loop_closed_form.pprint()
     piecewise_D = compute_piecewise_D(d, D, loop_guard, loop_closed_form, precondition)
-    print('D = %s' % piecewise_D)
+    # print('D = %s' % piecewise_D)
     scalar_closed_form = loop_closed_form.subs({d: piecewise_D})
     branches_rets = [[] for _ in range(len(rets))]
     for base_case in rec.get_base_cases():
@@ -407,7 +407,7 @@ def symbol2func(sym):
     return z3.Function(sym.decl().name(), z3.IntSort(), z3.IntSort())
 
 def solve_multivariate_rec(rec: MultiRecurrence):
-    rec.pprint()
+    # rec.pprint()
     if rec.is_nearly_tail():
         closed_forms = solve_nearly_tail(rec)
     else:
