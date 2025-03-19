@@ -77,7 +77,7 @@ def p_factor_id(p):
 
 def p_factor_negative(p):
     '''factor : MINUS factor'''
-    p[0] = -p[1]
+    p[0] = -p[2]
 
 def p_factor_paren(p):
     '''factor : LPAREN expression RPAREN'''

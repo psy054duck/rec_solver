@@ -78,12 +78,14 @@ def gen_exponential_polynomials_template(bases_multi_dict, ind_var):
 def gen_polynomial_template_for_degree(ind_var, degr, name=""):
     # coeffs = sp.symbols('_%s_c:%d' % (name, degr + 1))
     # coeffs = [sp.Symbol('_%s_c%d' % (name, i)) for i in range(degr + 1)]
+    name = name.replace("-", "__")
     coeffs = [z3.Int('_%s_c%d' % (name, i)) for i in range(degr + 1)]
     template = sum([c*z3_pow(ind_var, i) for i, c in enumerate(coeffs)], 0)
     return template, list(coeffs)
 
 def z3_pow(expr, p):
     assert(isinstance(p, int) or expr == 1 or expr == -1)
+    # mod = z3.Function('Mod', z3.IntSort(), z3.IntSort(), z3.IntSort())
     if expr == 1: return expr
     if expr == -1 and not isinstance(p, int): return z3.If(p % 2 == 0, 1, -1)
     res = 1

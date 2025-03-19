@@ -1,5 +1,7 @@
-if (c == z - 1) {
-    a(c, z) = a(c, z - 1) + 2;
+if (Or(z <= 0, c <= 0)) {
+    a(c, z) = g(c);
+} else if (c == z - 1) {
+    a(c, z) = -a(c - 1, z - 1);
 } else {
-    a(c, z) = 0;
+    a(c, z) = a(c, z - 1);
 }

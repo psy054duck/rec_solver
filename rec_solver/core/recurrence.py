@@ -13,7 +13,7 @@ class Recurrence:
             ind_var = Recurrence.get_possible_ind_var(recursive_transitions)
             random_rec_case = recursive_transitions[0]
             # initial = {f.subs({ind_var: -1}, simultaneous=True): sp.Symbol(f.name, integer=True) for f in random_rec_case}
-            initial = {z3.substitute(f, (ind_var, -1)): z3.Int(f.name) for f in random_rec_case}
+            initial = {z3.substitute(f, (ind_var, z3.IntVal(-1))): z3.Int(f.decl().name()) for f in random_rec_case}
             new_branches = list(zip(recursive_conditions, recursive_transitions))
             return LoopRecurrence(initial, new_branches)
         else:
@@ -28,7 +28,7 @@ class Recurrence:
         ind_var = Recurrence.get_possible_ind_var(recursive_transitions)
         random_rec_case = recursive_transitions[0]
         # initial = {f.subs({ind_var: -1}, simultaneous=True): sp.Symbol(f.name, integer=True) for f in random_rec_case} | initial
-        initial = {z3.substitute(f, (ind_var, -1)): z3.Int(f.name) for f in random_rec_case} | initial
+        initial = {z3.substitute(f, (ind_var, z3.IntVal(-1))): z3.Int(f.decl().name()) for f in random_rec_case} | initial
         new_branches = list(zip(recursive_conditions, recursive_transitions))
         return LoopRecurrence(initial, new_branches)
 
@@ -76,11 +76,12 @@ class Recurrence:
                 return False
             # check if the inductive variable is the only symbol in arguments
             ind_var = Recurrence.get_possible_ind_var(transitions)
-            args = reduce(set.union, [set(f.args) for f in applied_func])
-            if not all([len(arg.free_symbols) == 1 for arg in args]) and not all([list(arg.free_symbols)[0] == ind_var for arg in args]):
+            args = reduce(set.union, [set(f.children()) for f in applied_func])
+            if not all([len(utils.get_vars(arg)) == 1 for arg in args]) and not all([list(arg.free_symbols)[0] == ind_var for arg in args]):
                 return False
             # check if all recursive cases are of form f(n + 1) = g(f(n))
-            if not all([arg - ind_var == 0 or arg - ind_var - 1 == 0 for arg in args]):
+            solver = z3.Solver()
+            if not all([solver.check(arg != ind_var) == z3.unsat or solver.check(arg != ind_var + 1) for arg in args]):
                 return False
         return True
 
@@ -118,8 +119,9 @@ class Recurrence:
         '''treat the only symbol in the first argument as the inductive variable'''
         first_trans = transitions[0]
         first_applied_func = list(first_trans.keys())[0]
-        first_arg = first_applied_func.args[0]
-        return list(first_arg.free_symbols)[0]
+        first_arg = first_applied_func.arg(0)
+        # return list(first_arg.free_symbols)[0]
+        return list(utils.get_vars(first_arg))[0]
 
 class BaseCase:
     def __init__(self, condition, op):
@@ -377,7 +379,7 @@ class LoopRecurrence:
         # all_funcs_next = [func.subs({self.ind_var: self.ind_var + 1}) for func in all_funcs]
         all_funcs_next = [z3.simplify(z3.substitute(func, (self.ind_var, self.ind_var + 1))) for func in all_funcs]
         for trans in transitions:
-            need_padding = set(all_funcs_next) - set(trans.keys())
+            need_padding = set(all_funcs_next) - {z3.simplify(k) for k in trans.keys()}
             # identity_trans = {k: k.subs({self.ind_var: self.ind_var - 1}) for k in need_padding}
             identity_trans = {z3.simplify(k): z3.simplify(z3.substitute(k, (self.ind_var, self.ind_var - 1))) for k in need_padding}
             new_transitions.append(trans | identity_trans)
@@ -426,11 +428,11 @@ class LoopRecurrence:
                 cur_val_mapping = list(cur_values.items())
                 solver = z3.Solver()
                 # if z3.simplify(z3.substitute(cond, *cur_val_mapping)) == z3.BoolVal(True):
-                if solver.check(z3.Not(z3.substitute(cond, *cur_val_mapping))) == z3.unsat:
+                if solver.check(z3.Not(z3.substitute(cond, cur_val_mapping))) == z3.unsat:
                     # cur_transition = {k.subs(self.ind_var, i): v.subs(self.ind_var, i) for k, v in transitions[cond_index].items()}
                     # true_values = {k: v.subs(cur_values) for k, v in cur_transition.items()}
                     cur_transition = {z3.simplify(z3.substitute(k, (self.ind_var, z3.IntVal(i)))): z3.substitute(v, (self.ind_var, z3.IntVal(i))) for k, v in transitions[cond_index].items()}
-                    true_values = {z3.simplify(k): z3.substitute(v, *cur_val_mapping) for k, v in cur_transition.items()}
+                    true_values = {z3.simplify(k): z3.simplify(z3.substitute(v, *cur_val_mapping)) for k, v in cur_transition.items()}
                     first_n_values.append(true_values)
                     index_seq.append(cond_index)
                     break
@@ -445,8 +447,10 @@ class LoopRecurrence:
 
     def run_one_iteration_for_ith_transition(self, cur_value, ith):
         transition = self.transitions[ith]
-        val = {v: transition[v].subs(cur_value, simultaneous=True) for v in transition}
-        val = {k.func(self.ind_var): val[k] for k in val}
+        # val = {v: transition[v].subs(cur_value, simultaneous=True) for v in transition}
+        val = {v: z3.substitute(transition[v], list(cur_value.items())) for v in transition}
+        # val = {k.func(self.ind_var): val[k] for k in val}
+        val = {z3.simplify(z3.substitute(k, (self.ind_var, self.ind_var - 1))): val[k] for k in val}
         return val
 
     def project_to_scalars(self):

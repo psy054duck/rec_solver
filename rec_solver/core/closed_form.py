@@ -236,6 +236,15 @@ class PiecewiseClosedForm:
             for c in closed.flatten_closed_forms:
                 yield c
 
+    def to_z3(self):
+        expressions = defaultdict(list)
+        for cond, closed in zip(self.conditions, self.closed_forms):
+            sp_closed = closed.to_z3()
+            for f in sp_closed:
+                expressions[f].append((sp_closed[f], cond))
+        res = {f: utils.to_ite(expressions[f]) for f in expressions}
+        return res
+
 class SymbolicClosedForm:
     def __init__(self, constraints, closed_forms, ind_var):
         self._constraints = constraints
@@ -476,3 +485,6 @@ class MultiFuncClosedForm:
 
     def __str__(self):
         return "%s: %s" % (self.func_decl, self.closed_form)
+
+    def as_dict(self):
+        return self.to_z3()
