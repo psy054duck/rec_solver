@@ -202,7 +202,7 @@ def _compute_candidate_solution(rec: Recurrence, start, n, ith):
 
 def _solve_as_nonconditional(rec: Recurrence, seq):
     new_rec = LoopRecurrence.build_nonconditional_from_rec_by_seq(rec, seq, {})
-    new_rec.pprint()
+    # new_rec.pprint()
     period = len(seq)
     if is_solvable_map(new_rec):
         closed_form = []
