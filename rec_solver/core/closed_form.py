@@ -472,7 +472,7 @@ class MultiFuncClosedForm:
         return self._closed_form
 
     def to_z3(self):
-        return {utils.to_z3(self.func_decl): utils.to_z3(self._closed_form)}
+        return {self.func_decl: self._closed_form}
 
     def __str__(self):
         return "%s: %s" % (self.func_decl, self.closed_form)

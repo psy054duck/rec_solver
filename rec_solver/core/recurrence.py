@@ -127,8 +127,10 @@ class BaseCase:
         self.op = op
 
     def subs(self, mapping):
-        condition = self.condition.subs(mapping, simultaneous=True)
-        ops = tuple(op.subs(mapping, simultaneous=True) for op in self.op)
+        # condition = self.condition.subs(mapping, simultaneous=True)
+        condition = z3.substitute(self.condition, list(mapping.items()))
+        # ops = tuple(op.subs(mapping, simultaneous=True) for op in self.op)
+        ops = tuple(z3.substitute(op, list(mapping.items())) for op in self.op)
         return BaseCase(condition, ops)
 
     def __str__(self):
@@ -136,7 +138,7 @@ class BaseCase:
             [op] = self.op
         except ValueError:
             op = self.op
-        '{<50}if {}'.format(op, self.condition)
+        return '{}if {}'.format(op, self.condition)
 
 class RecursiveCase:
     def __init__(self, condition, recursive_calls, op):
@@ -145,9 +147,12 @@ class RecursiveCase:
         self.op = op
 
     def subs(self, mapping):
-        condition = self.condition.subs(mapping, simultaneous=True)
-        recursive_calls = {name: self.recursive_calls[name].subs(mapping, simultaneous=True) for name in self.recursive_calls}
-        ops = tuple(op.subs(mapping, simultaneous=True) for op in self.op)
+        # condition = self.condition.subs(mapping, simultaneous=True)
+        condition = z3.substitute(self.condition, list(mapping.items()))
+        # recursive_calls = {name: self.recursive_calls[name].subs(mapping, simultaneous=True) for name in self.recursive_calls}
+        recursive_calls = {name: z3.substitute(self.recursive_calls[name], list(mapping.items())) for name in self.recursive_calls}
+        # ops = tuple(op.subs(mapping, simultaneous=True) for op in self.op)
+        ops = tuple(z3.substitute(op, list(mapping.items())) for op in self.op)
         return RecursiveCase(condition, recursive_calls, ops)
 
     def is_tail(self):
@@ -188,13 +193,14 @@ class MultiRecurrence:
 
     def number_ret(self):
         any_case = self.get_base_cases()[0]
-        # if isinstance(any_case.op, sp.Piecewise):
-        #     arg = any_case.op.args[0]
-        #     return len(arg[0])
+        if isinstance(any_case.op, list):
+            arg = any_case.op[0]
+            return len(arg[0])
         return len(any_case.op)
 
     def subs(self, mapping):
-        func_sig = self.func_sig.subs(mapping, simultaneous=True)
+        # func_sig = self.func_sig.subs(mapping, simultaneous=True)
+        func_sig = z3.substitute(self.func_sig, list(mapping.items()))
         # conditions  = [cond.subs(mapping, simultaneous=True) for cond in self.conditions]
         # transitions = []
         # for transition in self.transitions:
