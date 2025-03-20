@@ -83,6 +83,9 @@ class Recurrence:
             solver = z3.Solver()
             if not all([solver.check(arg != ind_var) == z3.unsat or solver.check(arg != ind_var + 1) for arg in args]):
                 return False
+            for k in trans:
+                if solver.check(k.arg(0) == ind_var + 1) == z3.unsat:
+                    return False
         return True
 
     @staticmethod
@@ -345,7 +348,7 @@ class LoopRecurrence:
         self._initial = initial
         app = self.get_app()
         # print(app)
-        last_args = {a.children()[-1] for a in app if not a.decl().kind() != z3.Z3_OP_UNINTERPRETED}
+        last_args = {a.children()[-1] for a in app if a.decl().kind() == z3.Z3_OP_UNINTERPRETED}
         if len(last_args) > 1:
             raise Exception("More than one induction variable")
         self._ind_var = last_args.pop()

@@ -141,10 +141,15 @@ def get_app(expr):
     '''Get applications (with symbolic arguments) and symbols from "expr"'''
     decl = expr.decl()
     args = expr.children()
-    if decl.kind() == z3.Z3_OP_UNINTERPRETED:
-        if any(arg.decl().kind() == z3.Z3_OP_UNINTERPRETED for arg in args):
-            return {expr} | reduce(set.union, [get_app(arg) for arg in args], set())
-    return reduce(set.union, [get_app(arg) for arg in args], set())
+    res = reduce(set.union, [get_app(arg) for arg in args], set())
+    if z3.is_app(expr) and decl.kind() == z3.Z3_OP_UNINTERPRETED and decl.arity() > 0 and any(len(get_vars(arg)) != 0 for arg in args):
+        res.add(expr)
+    return res
+    # if decl.kind() == z3.Z3_OP_UNINTERPRETED:
+    #     # if any(arg.decl().kind() == z3.Z3_OP_UNINTERPRETED for arg in args):
+    #     if any(len(get_vars(arg)) != 0 for arg in args):
+    #         return {expr} | reduce(set.union, [get_app(arg) for arg in args], set())
+    # return reduce(set.union, [get_app(arg) for arg in args], set())
     # try:
     #     args = expr.children()
     # except:
