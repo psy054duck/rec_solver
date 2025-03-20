@@ -455,6 +455,7 @@ def solve_piecewise_sol(constraint, x, sort=z3.Real):
     # dnf = to_dnf(constraint)
     premises = []
     linear_exprs = []
+    dnf_converter = DNFConverter()
     if is_convex(constraint):
         atoms = get_all_atoms(constraint)
         possible_eqs = {to_eq(atom) for atom in atoms}
@@ -464,9 +465,9 @@ def solve_piecewise_sol(constraint, x, sort=z3.Real):
         for eq in possible_eqs:
             if solver.check(z3.Not(eq)) == z3.unsat:
                 eqs.add(eq)
-        return ConditionalExpr([z3.BoolVal(True)], [solve_x(eqs, x)])
+        if len(eqs) >= len(x):
+            return ConditionalExpr([z3.BoolVal(True)], [solve_x(eqs, x)])
     # dnf = formula2dnf(constraint)
-    dnf_converter = DNFConverter()
     dnf = dnf_converter.to_dnf(constraint)
     
     for conjunct in dnf:
