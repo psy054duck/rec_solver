@@ -44,21 +44,33 @@ def solve_for_exponential_polynomial(bases_multi_dict, func_decls, first_n_value
        It had better to replace it with z3, if z3 has any internal equation solving technique which allows parameters'''
     template, coeffs = gen_exponential_polynomials_template(bases_multi_dict, ind_var)
     eps = {}
+    deno = sp.Symbol('deno', integer=True)
+    vars = [utils.to_sympy(c) for c in coeffs] + [deno]
     for func in func_decls:
         # solver = z3.Solver()
         eqs = []
         for i, value in enumerate(first_n_values):
             cur_func_value = value[func(i)]
-            eqs.append(utils.to_sympy(cur_func_value) - utils.to_sympy(template).subs(utils.to_sympy(ind_var), i))
+            eqs.append(deno*utils.to_sympy(cur_func_value) - utils.to_sympy(template).subs(utils.to_sympy(ind_var), i))
             # eqs.append(cur_func_value - z3.substitute(template, (ind_var, z3.IntVal(i))))
             # solver.add(cur_func_value == z3.simplify(z3.substitute(template, (ind_var, z3.IntVal(i)))))
-        sol = sp.solve(eqs, [utils.to_sympy(c) for c in coeffs])
+        # sol = sp.solve(eqs, [utils.to_sympy(c) for c in coeffs] + [deno])
+        sol = sp.linsolve(eqs, vars)
+        if sol.is_empty:
+            raise Exception('Empty')
+        parametric_sol, = sol
+        val = {}
+        for var in vars:
+            all_deno = [sp.fraction(s.coeff(var))[1] for s in parametric_sol]
+            val[var] = sp.lcm(all_deno)
+        instantiated_sol = {var: v.subs(val) for var, v in zip(vars, parametric_sol)}
         # sat_res = solver.check()
         # assert(sat_res == z3.sat)
-        instantiated_ep = utils.to_sympy(template).subs(sol)
+        # print(sol)
+        instantiated_ep = utils.to_sympy(template).subs(instantiated_sol)
         # m = solver.model()
         # instantiated_ep = m.eval(template)
-        eps[func(ind_var)] = utils.to_z3(instantiated_ep)
+        eps[func(ind_var)] = utils.to_z3(instantiated_ep)/z3.IntVal(val[deno])
     return eps
 
 def gen_exponential_polynomials_template(bases_multi_dict, ind_var):
@@ -90,7 +102,7 @@ def z3_pow(expr, p):
     if expr == -1 and not isinstance(p, int): return z3.If(p % 2 == 0, 1, -1)
     res = 1
     for _ in range(p):
-        res += expr
+        res *= expr
     return res
 
 def get_layers_for_solvable_map(rec: LoopRecurrence):

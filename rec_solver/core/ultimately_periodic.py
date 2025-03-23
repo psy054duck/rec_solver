@@ -33,7 +33,7 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
         parameters = rec.get_symbolic_values()
         cur_val = {p: model.eval(p, model_completion=True) for p in parameters}
         initialized_rec = rec.subs(cur_val)
-        # initialized_rec.pprint()
+        initialized_rec.pprint()
         # print(initialized_rec.conditions)
         _, index_seq = _solve_ultimately_periodic_initial(initialized_rec)
         qs = [z3.Int('q%d' % i) for i in range(len(index_seq) - 1)]
@@ -49,9 +49,9 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
         logger.debug('In the %dth iteration: the index sequence is %s' % (i, index_seq))
         logger.debug('In the %dth iteration: the set up index sequence template is %s' % (i, index_seq_temp))
         logger.debug('In the %dth iteration: the closed-form solution is\n%s' % (i, can_sol))
-        print(qs)
+        # print(qs)
         q_linear = utils.solve_piecewise_sol(constraint, qs, sort=z3.Int)
-        print(q_linear.to_piecewise())
+        # print(q_linear.to_piecewise())
         for q_constraint, q_sol in zip(q_linear.conditions, q_linear.expressions):
             constraint_no_q = z3.substitute(z3.And(constraint, q_constraint), *[(q, q_sol[q]) for q in qs])
             qe = z3.Tactic('qe')
