@@ -306,6 +306,7 @@ def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
     D = z3.Int('_D')
     rets = z3.Ints(' '.join(['_ret%d' % i for i in range(rec.number_ret())]))
     loop_rec = nearly_tail2loop(rec, d, rets)
+    loop_rec.pprint()
     loop_guard = get_loop_cond(rec, d)
     precondition = z3.BoolVal(True)
     if is_array:
@@ -313,8 +314,8 @@ def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
         loop_guard = z3.Or(loop_guard, z3.Eq(f(d), 0))
     loop_closed_form = solve_ultimately_periodic_symbolic(loop_rec, precondition=precondition)
     piecewise_D = compute_piecewise_D(d, D, loop_guard, loop_closed_form, precondition)
-    # print('D = %s' % piecewise_D)
     scalar_closed_form = loop_closed_form.subs({d: piecewise_D})
+    # scalar_closed_form.pprint()
     branches_rets = [[] for _ in range(len(rets))]
     for base_case in rec.get_base_cases():
         cond = base_case.condition
@@ -341,6 +342,10 @@ def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
         branches[-1] = (branches[-1][0], True)
     rets0 = [utils.to_ite(branches) for branches in branches_rets]
     closed_form_dict = scalar_closed_form.as_dict()
+    # tmp_closed = loop_closed_form.as_dict()
+    # tmp_ret = z3.Function('_ret0', z3.IntSort(), z3.IntSort())
+    # ret0 = z3.Int('_ret0')
+    # print(z3.simplify(z3.substitute(piecewise_D, [(z3.Int('sarg'), z3.IntVal(1)), (z3.Int('sarg1'), z3.IntVal(-1))])))
     mapping = {ret: ret0 for ret, ret0 in zip(rets, rets0)}
     return [z3.substitute(closed_form_dict[symbol2func(ret)(d)], *list(mapping.items())) for ret in rets]
 

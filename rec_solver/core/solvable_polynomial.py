@@ -70,7 +70,7 @@ def solve_for_exponential_polynomial(bases_multi_dict, func_decls, first_n_value
         instantiated_ep = utils.to_sympy(template).subs(instantiated_sol)
         # m = solver.model()
         # instantiated_ep = m.eval(template)
-        eps[func(ind_var)] = utils.to_z3(instantiated_ep)/z3.IntVal(val[deno])
+        eps[func(ind_var)] = z3.simplify(utils.to_z3(instantiated_ep)/z3.IntVal(val[deno]))
     return eps
 
 def gen_exponential_polynomials_template(bases_multi_dict, ind_var):
