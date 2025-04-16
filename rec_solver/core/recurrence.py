@@ -338,6 +338,7 @@ class LoopRecurrence:
     def __init__(self, initial, branches):
         self._preprocess(initial, branches)
         self.cached_result = {}
+        self.reverses = set()
 
     def _preprocess(self, initial, branches):
         conditions = [branch[0] for branch in branches]
@@ -371,6 +372,12 @@ class LoopRecurrence:
     #         else:
     #             self._recursive_conditions.append(cond)
     #             self._recursive_transitions.append(trans)
+    def set_reverse(self, reverse_set):
+        '''This functions is currently designed for multivariate recurrence solving.
+           reverse_set is a subset of keys in transitions.
+           Normally, in an iteration, the corresponding transition should be left composited.
+           But if some keys are in reverse_set, the transition should be right composited.'''
+        self.reverses = reverse_set
         
     @staticmethod
     def mk_rec(initial, conditions, transitions):
@@ -450,10 +457,11 @@ class LoopRecurrence:
 
     def run_one_iteration_for_ith_transition(self, cur_value, ith):
         transition = self.transitions[ith]
-        # val = {v: transition[v].subs(cur_value, simultaneous=True) for v in transition}
-        val = {v: z3.substitute(transition[v], list(cur_value.items())) for v in transition}
-        # val = {k.func(self.ind_var): val[k] for k in val}
-        val = {z3.simplify(z3.substitute(k, (self.ind_var, self.ind_var - 1))): val[k] for k in val}
+        # left composition
+        left_val = {v: z3.substitute(transition[v], list(cur_value.items())) for v in transition if z3.simplify(v) not in self.reverses}
+        # right composition
+        right_val = {v: z3.substitute(cur_value[v], list(transition[v].items())) for v in cur_value if z3.simplify(v) in self.reverses}
+        val = {z3.simplify(z3.substitute(k, (self.ind_var, self.ind_var - 1))): val[k] for k in left_val | right_val}
         return val
 
     def project_to_scalars(self):
@@ -565,10 +573,17 @@ class LoopRecurrence:
         transition = {z3.simplify(func_decl(ind_var + 1)): func_decl(ind_var) for func_decl in func_decls}
         for i in seq:
             cur_transition = transitions[i]
-            new_cur_transition = {z3.simplify(func_app.decl()(ind_var)): trans for func_app, trans in cur_transition.items()}
-            # transition = {func_app: trans.subs(new_cur_transition, simultaneous=True) for func_app, trans in transition.items()}
-            transition = {z3.simplify(func_app): z3.substitute(trans, *list(new_cur_transition.items())) for func_app, trans in transition.items()}
-        return cls(initial, [(z3.BoolVal(True), transition)])
+            # left composition
+            left_cur_transition = {z3.simplify(func_app.decl()(ind_var)): trans for func_app, trans in cur_transition.items()}
+            left_transition = {z3.simplify(func_app): z3.substitute(trans, *list(left_cur_transition.items())) for func_app, trans in transition.items() if z3.simplify(func_app) not in rec.reverses}
+
+            # right composition
+            right_cur_transition = cur_transition
+            right_transition = {z3.simplify(func_app): z3.substitute(trans, *list(transition.items())) for func_app, trans in right_cur_transition.items() if z3.simplify(func_app) in rec.reverses}
+            transition = left_transition | right_transition
+        new_rec = cls(initial, [(z3.BoolVal(True), transition)])
+        new_rec.set_reverse = rec.reverses
+        return new_rec
 
     def get_app(self):
         terms = self._get_app_from_conditions() | self._get_app_from_transitions()

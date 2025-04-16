@@ -54,11 +54,27 @@ class PeriodicClosedForm:
             sp.pprint(sp.Eq(f, sp_dict[f]))
             print()
 
-    def subs(self, mapping):
+    def subs(self, mapping, reverse_list=[]):
         new_list = []
+        normal_reverse_list = [app.decl()(self.ind_var) for app in reverse_list]
+        zero_reverse_list = [app.decl()(z3.IntVal(0)) for app in reverse_list]
+        is_initial_mapping = all(len(app.children()) == 1 and app.arg(0) == 0 for app in mapping)
         for part in self._closed_form_list:
             # cur_closed = {k: c.subs(mapping, simultaneous=True) for k, c in part.items()}
-            cur_closed = {k: z3.substitute(c, *list(mapping.items())) for k, c in part.items()}
+            left_cur_closed = {k: z3.substitute(c, *list(mapping.items())) for k, c in part.items() if k not in normal_reverse_list}
+            left_mapping = {k: v for k, v in mapping.items() if k not in normal_reverse_list}
+            right_cur_closed = {}
+            if is_initial_mapping and len(reverse_list) > 0:
+                assert(all([k.decl().name() == v.decl().name() for k, v in mapping.items() if k in normal_reverse_list]))
+                zero_closed = {k.decl()(z3.IntVal(0)): v for k, v in part.items()}
+                initial_transform = {z3.Int(k.decl().name()): k.decl()(z3.IntVal(0)) for k in mapping if k in zero_reverse_list}
+                normal_mapping = {k.decl()(self.ind_var): c for k, c in mapping.items()}
+                right_cur_closed = {k: z3.substitute(z3.substitute(c, *list(initial_transform.items())), *list(zero_closed.items())) for k, c in normal_mapping.items() if k in normal_reverse_list}
+                # right_cur_closed = {k: z3.substitute(c, *list(part.items())) for k, c in mapping.items() if k in normal_reverse_list}
+                right_cur_closed = {k: z3.substitute(c, [(v, k) for k, v in initial_transform.items()]) for k, c in right_cur_closed.items()}
+                right_cur_closed = {k: z3.substitute(c, *list(left_mapping.items())) for k, c in right_cur_closed.items()}
+            cur_closed = left_cur_closed | right_cur_closed
+            # cur_closed = {k: z3.substitute(c, *list(mapping.items())) for k, c in part.items()}
             new_list.append(cur_closed)
         return PeriodicClosedForm(new_list, self.ind_var)
 

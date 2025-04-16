@@ -323,11 +323,6 @@ def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
         if isinstance(ops, list) and len(ops) > 0 and isinstance(ops[0], tuple):
             assert(len(ops) == 1)
             ops = ops[0][0]
-            # vars_bases_case = set()
-            # for case in ops:
-            #     operations, condition = case[0], case[1]
-            #     vars_bases_case = vars_bases_case | utils.get_vars(condition)
-            #     vars_bases_case = vars_bases_case | reduce(set.union, [utils.get_vars(o) for o in operations])
         vars_bases_case = reduce(set.union, [utils.get_vars(op) for op in ops])
         # args = utils.get_vars(cond) | reduce(set.union, [utils.get_vars(op) for op in ops])
         args = utils.get_vars(cond) | vars_bases_case
@@ -340,6 +335,7 @@ def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
             branches.append((op_D, cond_D))
     for branches in branches_rets:
         branches[-1] = (branches[-1][0], True)
+    # print("D = %s" % piecewise_D)
     rets0 = [utils.to_ite(branches) for branches in branches_rets]
     closed_form_dict = scalar_closed_form.as_dict()
     # tmp_closed = loop_closed_form.as_dict()
@@ -367,22 +363,29 @@ def nearly_tail2loop(rec: MultiRecurrence, d, rets):
     loop_branch_conditions = [z3.substitute(cond, *list(args_func_d.items())) for cond in rec_conditions]
     transitions = []
     # for i, rec_call in enumerate(recursive_calls):
+    ret_funcs = [symbol2func(ret) for ret in rets]
     for rec_case in rec.get_rec_cases():
         rec_call = rec_case.recursive_calls
         args_p = list(rec_call.values())[0].children()
-        # post_ops = rec_post_ops[i]
         post_ops = rec_case.op
-        # transition = {args_func_d_1[arg]: arg_p.subs(args_func_d, simultaneous=True) for arg, arg_p in zip(args, args_p)}
         transition = {z3.simplify(args_func_d_1[arg]): z3.substitute(arg_p, *list(args_func_d.items())) for arg, arg_p in zip(args, args_p)}
         names = list(rec_call.keys())
-        ret_funcs = [symbol2func(ret) for ret in rets]
         mapping = {name: ret_func(d) for name, ret_func in zip(names, ret_funcs)} | args_func_d
-        # transition |= {ret_func(d + 1): post_op.subs(mapping, simultaneous=True) for ret_func, post_op in zip(ret_funcs, post_ops)}
-        transition |= {z3.simplify(ret_func(d + 1)): z3.substitute(post_op, list(mapping.items())) for ret_func, post_op in zip(ret_funcs, post_ops)}
+        ret_trans = {z3.simplify(ret_func(d + 1)): z3.substitute(post_op, list(mapping.items())) for ret_func, post_op in zip(ret_funcs, post_ops)}
+        transition |= ret_trans
         transitions.append(transition)
     initial = {args_func_map[ret](0): ret for ret in rets} | {symbol2func(arg)(0): arg for arg in args}
     loop_rec = LoopRecurrence.mk_rec(initial, loop_branch_conditions, transitions)
+    loop_rec.set_reverse({z3.simplify(ret_func(d + 1)) for ret_func in ret_funcs})
     return loop_rec
+
+# def _transform_ret(ret_dict):
+#     dim = len(ret_dict) + 1
+#     m_coeffs = [sp.Symbol('_ret_m%d_%d' % (i, j)) for j in range(dim) for i in range(dim)]
+#     m = sp.Matrix(m_coeffs).reshape(dim, dim)
+#     print(m)
+#     print('hhh')
+
 
 def get_loop_cond(rec: MultiRecurrence, d):
     assert(rec.is_nearly_tail())

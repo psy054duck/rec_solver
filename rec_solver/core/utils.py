@@ -520,7 +520,10 @@ def _solve_linear_expr_heuristic(constraints, x):
         all_mentioned_symbols = {to_z3(v) for v in all_mentioned_symbols}
         if len(eqs) == len(x) and len(set(x) - set(x).intersection(all_mentioned_symbols)) == 0:
             break
-    res = sp.solve(eqs, [to_sympy(v) for v in x], dict=True)[0]
+    res = sp.solve(eqs, [to_sympy(v) for v in x], dict=True)
+    if len(res) == 0:
+        return None
+    res = res[0]
     return {to_z3(v): to_z3(res[v]) for v in res}
 
 def _get_possible_eqs(constraints, x):

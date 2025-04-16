@@ -33,7 +33,7 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
         parameters = rec.get_symbolic_values()
         cur_val = {p: model.eval(p, model_completion=True) for p in parameters}
         initialized_rec = rec.subs(cur_val)
-        initialized_rec.pprint()
+        # initialized_rec.pprint()
         # print(initialized_rec.conditions)
         _, index_seq = _solve_ultimately_periodic_initial(initialized_rec)
         qs = [z3.Int('q%d' % i) for i in range(len(index_seq) - 1)]
@@ -49,9 +49,9 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
         logger.debug('In the %dth iteration: the index sequence is %s' % (i, index_seq))
         logger.debug('In the %dth iteration: the set up index sequence template is %s' % (i, index_seq_temp))
         logger.debug('In the %dth iteration: the closed-form solution is\n%s' % (i, can_sol))
-        print(qs)
+        logger.debug('In the %dth iteration: the q\'s are %s' % (i, qs))
         q_linear = utils.solve_piecewise_sol(constraint, qs, sort=z3.Int)
-        print(q_linear.to_piecewise())
+        logger.debug('In the %dth iteration: the q\'s solutions are %s' % (i, q_linear.to_piecewise()))
         for q_constraint, q_sol in zip(q_linear.conditions, q_linear.expressions):
             constraint_no_q = z3.substitute(z3.And(constraint, q_constraint), *[(q, q_sol[q]) for q in qs])
             qe = z3.Tactic('qe')
@@ -61,6 +61,7 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
             acc_condition = z3.And(acc_condition, z3.Not(constraint_no_kq))
             closed_forms.append(can_sol.simple_subs(q_sol))
     return SymbolicClosedForm(constraints, closed_forms, rec.ind_var)
+    
 
 # def _unpack_q_expressions(q_linear):
 #     conditions = q_linear.conditions
@@ -142,36 +143,23 @@ def _smallest_violation(n_range, cond_range, k):
     assert(sat_res == z3.sat)
     m = solver.model()
     return m.eval(minimal)
-    # intersect = n_range.intersect(cond_range)
-    # comp = intersect.complement(n_range)
-    # left = sp.ceiling(comp.inf)
-    # if not comp.contains(left):
-    #     left += 1
-    # return left
 
 def _compute_solution_by_index_seq(rec: LoopRecurrence, index_seq):
     patterns = [seq for seq, _ in index_seq]
     acc_thresholds = [sum(cnt for _, cnt in index_seq[:i]) for i in range(1, len(index_seq))]
     nums = [cnt for _, cnt in index_seq]
-    # thresholds = [0] + [cnt for _, cnt in index_seq[:-1]] + [sp.oo]
     thresholds = [0] + acc_thresholds + [sp.oo]
     nonconditional = [_solve_as_nonconditional(rec, pattern) for pattern in patterns]
     shift_closed = [closed.subs({closed.ind_var: closed.ind_var - shift}) for closed, shift in zip(nonconditional, thresholds)]
-    # initials = [rec.initial] + [closed.eval_at(t) for closed, t in zip(shift_closed, thresholds[1:])]
-    # print(initials)
     closed_forms = []
-    # for initial, closed, t in zip(initials, shift_closed, thresholds):
-    #     mapping = {func(0): initial[func(t)] for func in rec.func_decls}
-    #     closed_forms.append(closed.subs(mapping).subs(rec.initial))
     initial = rec.initial
     acc = 0
     for closed, t in zip(shift_closed, nums):
         acc += t
-        closed_forms.append(closed.subs(initial))
+        closed_forms.append(closed.subs(initial, rec.reverses))
         initial = {k.decl()(0): v for k, v in closed_forms[-1].eval_at(acc).items()}
 
     thresholds = [-sp.oo] + thresholds[1:]
-    # conditions = [sp.Interval(thresholds[i], thresholds[i + 1], left_open=False, right_open=True).as_relational(rec.ind_var) for i in range(len(thresholds) - 1)]
     conditions = []
     for i in range(len(thresholds) - 1):
         if thresholds[i] is -sp.oo and thresholds[i + 1] is sp.oo:
@@ -182,7 +170,6 @@ def _compute_solution_by_index_seq(rec: LoopRecurrence, index_seq):
             conditions.append(thresholds[i] <= rec.ind_var)
         else:
             conditions.append(z3.And(thresholds[i] <= rec.ind_var, rec.ind_var < thresholds[i + 1]))
-    # conditions = [z3.And(thresholds[i] <= rec.ind_var, rec.ind_var < thresholds[i + 1]) for i in range(len(thresholds) - 1)]
     return PiecewiseClosedForm(conditions, closed_forms, rec.ind_var)
 
 def _compute_candidate_solution(rec: Recurrence, start, n, ith):
