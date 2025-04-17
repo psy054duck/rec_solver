@@ -146,16 +146,16 @@ def _smallest_violation(n_range, cond_range, k):
 
 def _compute_solution_by_index_seq(rec: LoopRecurrence, index_seq):
     patterns = [seq for seq, _ in index_seq]
-    acc_thresholds = [sum(cnt for _, cnt in index_seq[:i]) for i in range(1, len(index_seq))]
-    nums = [cnt for _, cnt in index_seq]
+    acc_thresholds = [sum(len(seq)*cnt for seq, cnt in index_seq[:i]) for i in range(1, len(index_seq))]
+    # nums = [cnt for _, cnt in index_seq]
     thresholds = [0] + acc_thresholds + [sp.oo]
     nonconditional = [_solve_as_nonconditional(rec, pattern) for pattern in patterns]
     shift_closed = [closed.subs({closed.ind_var: closed.ind_var - shift}) for closed, shift in zip(nonconditional, thresholds)]
     closed_forms = []
     initial = rec.initial
     acc = 0
-    for closed, t in zip(shift_closed, nums):
-        acc += t
+    for closed, (seq, t) in zip(shift_closed, index_seq):
+        acc += t*len(seq)
         closed_forms.append(closed.subs(initial, rec.reverses))
         initial = {k.decl()(0): v for k, v in closed_forms[-1].eval_at(acc).items()}
 

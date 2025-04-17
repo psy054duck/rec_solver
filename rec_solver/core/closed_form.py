@@ -8,21 +8,33 @@ from functools import reduce
 # z3.set_option(max_depth=99999999, max_args=9999999, max_width=999999999, max_lines=99999999, max_indent=99999999)
 
 class PeriodicClosedForm:
-    def __init__(self, closed_form_list, ind_var):
+    def __init__(self, closed_form_list, ind_var, conditions=None):
         self._closed_form_list = closed_form_list
         self._ind_var = ind_var
-
-    def eval_at(self, n):
-        if self.period == 1:
-            r = 0
+        if conditions is not None:
+            self._conditions = conditions
         else:
-            assert(n >= 0)
-            r = n % self.period
+            self._conditions = [self.ind_var % self.period == i for i in range(self.period)]
+    
+    def eval_at(self, n):
+        # if self.period == 1:
+        #     r = 0
+        # else:
+        #     assert(n >= 0)
+        #     r = n % self.period
+        # if isinstance(n, int):
+        #     n = z3.IntVal(n)
+        # # val = {k.subs({self.ind_var: n}, simultaneous=True): c.subs({self.ind_var: n}, simultaneous=True) for k, c in self._closed_form_list[r].items()}
+        # val = {z3.simplify(z3.substitute(k, (self.ind_var, n))): z3.substitute(c, (self.ind_var, n)) for k, c in self._closed_form_list[r].items()}
+        raw_val = self.as_dict()
         if isinstance(n, int):
             n = z3.IntVal(n)
-        # val = {k.subs({self.ind_var: n}, simultaneous=True): c.subs({self.ind_var: n}, simultaneous=True) for k, c in self._closed_form_list[r].items()}
-        val = {z3.simplify(z3.substitute(k, (self.ind_var, n))): z3.substitute(c, (self.ind_var, n)) for k, c in self._closed_form_list[r].items()}
+        val = {f: z3.simplify(z3.substitute(v, (self.ind_var, n))) for f, v in raw_val.items()}
         return val
+
+    @property
+    def conditions(self):
+        return self._conditions.copy()
 
     def sympify(self):
         sympified = defaultdict(list)
@@ -37,15 +49,14 @@ class PeriodicClosedForm:
 
     def as_dict(self):
         tmp_res = defaultdict(list)
-        for i in range(self.period):
-            cond = z3.BoolVal(True)
-            if self.period != 1:
-                cond = self.ind_var % self.period == i
+        # for i in range(self.period):
+        for i, cond in enumerate(self.conditions):
+            # cond = z3.BoolVal(True)
+            # if self.period != 1:
+            #     cond = self.ind_var % self.period == i
             for f in self.closed_forms[i]:
                 tmp_res[f].append((self.closed_forms[i][f], cond))
         return {z3.simplify(f): utils.to_ite(tmp_res[f]) for f in tmp_res}
-
-
 
     def pprint(self):
         sp.init_printing()
@@ -76,7 +87,8 @@ class PeriodicClosedForm:
             cur_closed = left_cur_closed | right_cur_closed
             # cur_closed = {k: z3.substitute(c, *list(mapping.items())) for k, c in part.items()}
             new_list.append(cur_closed)
-        return PeriodicClosedForm(new_list, self.ind_var)
+        new_conditions = [z3.substitute(cond, *list(mapping.items())) for cond in self.conditions]
+        return PeriodicClosedForm(new_list, self.ind_var, new_conditions)
 
     def __str__(self):
         return str(self._closed_form_list)
@@ -121,9 +133,9 @@ class PeriodicClosedForm:
         except:
             return set()
 
-    @property
-    def conditions(self):
-        return [i % self.period for i in range(self.period)]
+    # @property
+    # def conditions(self):
+    #     return [i % self.period for i in range(self.period)]
     
     @property
     def closed_forms(self) -> list[dict]:
@@ -131,11 +143,12 @@ class PeriodicClosedForm:
 
     @property
     def flatten_conditions(self):
-        if self.period == 1:
-            yield z3.BoolVal(True)
-        else:
-            for i in range(self.period):
-                yield self.ind_var % self.period == i
+        return self.conditions
+        # if self.period == 1:
+        #     yield z3.BoolVal(True)
+        # else:
+        #     for i in range(self.period):
+        #         yield self.ind_var % self.period == i
 
     @property
     def flatten_closed_forms(self):

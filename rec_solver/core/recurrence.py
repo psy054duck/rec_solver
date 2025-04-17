@@ -461,7 +461,7 @@ class LoopRecurrence:
         left_val = {v: z3.substitute(transition[v], list(cur_value.items())) for v in transition if z3.simplify(v) not in self.reverses}
         # right composition
         right_val = {v: z3.substitute(cur_value[v], list(transition[v].items())) for v in cur_value if z3.simplify(v) in self.reverses}
-        val = {z3.simplify(z3.substitute(k, (self.ind_var, self.ind_var - 1))): val[k] for k in left_val | right_val}
+        val = {z3.simplify(z3.substitute(k, (self.ind_var, self.ind_var - 1))): v for k, v in (left_val | right_val).items()}
         return val
 
     def project_to_scalars(self):
