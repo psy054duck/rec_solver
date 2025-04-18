@@ -456,17 +456,17 @@ def solve_piecewise_sol(constraint, x, sort=z3.Real):
     premises = []
     linear_exprs = []
     dnf_converter = DNFConverter()
-    if is_convex(constraint):
-        atoms = get_all_atoms(constraint)
-        possible_eqs = {to_eq(atom) for atom in atoms}
-        solver = z3.Solver()
-        eqs = set()
-        solver.add(constraint)
-        for eq in possible_eqs:
-            if solver.check(z3.Not(eq)) == z3.unsat:
-                eqs.add(eq)
-        if len(eqs) >= len(x):
-            return ConditionalExpr([z3.BoolVal(True)], [solve_x(eqs, x)])
+    # if is_convex(constraint):
+    #     atoms = get_all_atoms(constraint)
+    #     possible_eqs = {to_eq(atom) for atom in atoms}
+    #     solver = z3.Solver()
+    #     eqs = set()
+    #     solver.add(constraint)
+    #     for eq in possible_eqs:
+    #         if solver.check(z3.Not(eq)) == z3.unsat:
+    #             eqs.add(eq)
+    #     if len(eqs) >= len(x):
+    #         return ConditionalExpr([z3.BoolVal(True)], [solve_x(eqs, x)])
     # dnf = formula2dnf(constraint)
     dnf = dnf_converter.to_dnf(constraint)
     

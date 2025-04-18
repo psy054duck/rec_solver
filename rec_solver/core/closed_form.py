@@ -100,14 +100,15 @@ class PeriodicClosedForm:
         return self.selected_to_z3(self.all_vars)
 
     def selected_to_z3(self, vars):
-        closed_form_z3_list = [self._to_z3(closed, vars) for closed in self._closed_form_list]
-        res = {}
-        for var in vars:
-            expr_z3 = closed_form_z3_list[-1][var]
-            for i, closed in enumerate(closed_form_z3_list[:-1]):
-                expr_z3 = z3.If(self.ind_var % self.period == i, closed[var], expr_z3)
-            res[var] = z3.simplify(expr_z3)
-        return res
+        # closed_form_z3_list = [self._to_z3(closed, vars) for closed in self._closed_form_list]
+        # res = {}
+        # for var in vars:
+        #     expr_z3 = closed_form_z3_list[-1][var]
+        #     for i, closed in enumerate(closed_form_z3_list[:-1]):
+        #         expr_z3 = z3.If(self.ind_var % self.period == i, closed[var], expr_z3)
+        #     res[var] = z3.simplify(expr_z3)
+        raw_closed = self.as_dict()
+        return {v: raw_closed[v] for v in vars}
 
 
     def _to_z3(self, closed, vars):
@@ -156,21 +157,26 @@ class PeriodicClosedForm:
             yield closed
 
 class PiecewiseClosedForm:
-    def __init__(self, conditions=[], closed_forms=[], ind_var=sp.Symbol('n', integer=True)):
+    # def __init__(self, conditions=[], closed_forms=[], ind_var=sp.Symbol('n', integer=True)):
+    def __init__(self, ind_var, conditions=[], closed_forms=[]):
         self._conditions = conditions
         self._closed_forms = closed_forms
         self._ind_var = ind_var
 
-    def concatenate(self, latter_closed):
-        conditions = self.conditions + latter_closed.conditions
+    def concatenate(self, latter_closed, threshold):
+        conditions = [z3.And(cond, self.ind_var < threshold) for cond in self.conditions]
+        conditions = conditions + latter_closed.conditions
         new_closed_forms = self.closed_forms + latter_closed.closed_forms
-        return PiecewiseClosedForm(conditions, new_closed_forms, self.ind_var)
+        return PiecewiseClosedForm(self.ind_var, conditions, new_closed_forms)
 
     def eval_at(self, n):
         assert(n >= 0)
-        fired = [c.subs({self.ind_var: n}) for c in self.conditions]
+        if isinstance(n, int):
+            n = z3.IntVal(n)
+        solver = z3.Solver()
+        fired = [solver.check(z3.Not(z3.substitute(c, (self.ind_var, n)))) == z3.unsat for c in self.conditions]
         assert(any(fired))
-        which = fired.index(True) - 1
+        which = fired.index(True)
         return self.closed_forms[which].subs({self.ind_var: n})
 
     def sympify(self):
@@ -194,7 +200,7 @@ class PiecewiseClosedForm:
         # conditions = [c.subs(mapping, simultaneous=True) for c in self.conditions]
         conditions = [z3.substitute(c, *tuple(mapping.items())) for c in self.conditions]
         closed_forms = [c.subs(mapping) for c in self.closed_forms]
-        return PiecewiseClosedForm(conditions, closed_forms, self.ind_var)
+        return PiecewiseClosedForm(self.ind_var, conditions, closed_forms)
 
     def simple_subs(self, mapping):
         mapping = mapping | {z3.BoolVal(1): z3.BoolVal(1)}
@@ -202,19 +208,18 @@ class PiecewiseClosedForm:
         conditions = [z3.substitute(c, *mapping_list) for c in self.conditions]
         # closed_forms = [z3.substitute(c, *mapping_list) for c in self.closed_forms]
         closed_forms = [c.subs(mapping) for c in self.closed_forms]
-        return PiecewiseClosedForm(conditions, closed_forms, self.ind_var)
+        return PiecewiseClosedForm(self.ind_var, conditions, closed_forms)
 
     def as_dict(self):
         closed_forms_z3 = [closed.as_dict() for closed in self.closed_forms]
         res = {}
         for var in self.all_vars:
             var_z3 = var
-            expr_z3 = closed_forms_z3[0][var_z3]
-            # for i, interval in enumerate(self.intervals[:-1]):
-            for i, cond in enumerate(self.conditions):
-                # cond = utils.interval_to_z3(interval, self.ind_var)
-                closed = closed_forms_z3[i][var_z3]
-                expr_z3 = z3.If(cond, closed, expr_z3)
+            expr_z3 = closed_forms_z3[-1][var_z3]
+            # for i, cond in enumerate(self.conditions[:-1]):
+            for closed, cond in reversed(list(zip(closed_forms_z3[:-1], self.conditions[:-1]))):
+                # closed = closed_forms_z3[i][var_z3]
+                expr_z3 = z3.If(cond, closed[var], expr_z3)
             res[var_z3] = z3.simplify(expr_z3)
         return res
 

@@ -9,6 +9,7 @@ from . import utils
 from .recurrence import Recurrence, LoopRecurrence
 from .closed_form import PeriodicClosedForm, PiecewiseClosedForm, SymbolicClosedForm
 from .solvable_polynomial import solve_solvable_map, is_solvable_map
+from .logic_simplification import DNFConverter
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +41,18 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
         # qs = sp.symbols('q:%d' % (len(index_seq) - 1), integer=True)
         index_seq_temp = [(s[0], q) for s, q in zip(index_seq, qs)] + [index_seq[-1]]
         can_sol = _compute_solution_by_index_seq(rec, index_seq_temp)
-        quantified_constraint, k = _set_up_constraints(rec, can_sol, index_seq_temp)
-        quantified_constraint = z3.And(quantified_constraint, *[q >= 1 for q in qs])
-        qe = z3.Then('qe', 'ctx-solver-simplify')
+        quantified_constraint, ks = _set_up_constraints(rec, can_sol, index_seq_temp)
+        print(quantified_constraint)
+        quantified_constraint = z3.simplify(z3.And(quantified_constraint, *[q >= 1 for q in qs]))
+        # qe = z3.Then('qe', 'ctx-solver-simplify')
+        qe = z3.Then('simplify', 'qe', 'simplify')
         # constraint = z3.And(*qe.apply(z3.ForAll(k, z3.Implies(k >= 0, quantified_constraint)))[0])
-        constraint = z3.simplify(z3.Or(*[z3.And(*c) for c in qe.apply(z3.ForAll(k, z3.Implies(k >= 0, quantified_constraint)))]))
+        full_constraint = z3.ForAll(ks, z3.Implies(z3.And([k >= 0 for k in ks]), quantified_constraint))
+        tmp_solver = z3.Solver()
+        # print(full_constraint)
+        print(tmp_solver.check(full_constraint))
+        print('*'*20)
+        constraint = z3.simplify(qe.apply(full_constraint).as_expr())
         logger.debug('In the %dth iteration: the sampled initial values are %s' % (i, cur_val))
         logger.debug('In the %dth iteration: the index sequence is %s' % (i, index_seq))
         logger.debug('In the %dth iteration: the set up index sequence template is %s' % (i, index_seq_temp))
@@ -55,12 +63,13 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
         for q_constraint, q_sol in zip(q_linear.conditions, q_linear.expressions):
             constraint_no_q = z3.substitute(z3.And(constraint, q_constraint), *[(q, q_sol[q]) for q in qs])
             qe = z3.Tactic('qe')
-            forall_constraint = z3.ForAll(k, z3.Implies(k >= 0, constraint_no_q))
+            forall_constraint = z3.ForAll(ks, z3.Implies(z3.And([k >= 0 for k in ks]), constraint_no_q))
             constraint_no_kq = z3.simplify(z3.Or(*[z3.And(*conjunct) for conjunct in qe.apply(forall_constraint)]))
             constraints.append(constraint_no_kq)
             acc_condition = z3.And(acc_condition, z3.Not(constraint_no_kq))
             closed_forms.append(can_sol.simple_subs(q_sol))
-    return SymbolicClosedForm(constraints, closed_forms, rec.ind_var)
+    res = SymbolicClosedForm(constraints, closed_forms, rec.ind_var)
+    return res
     
 
 # def _unpack_q_expressions(q_linear):
@@ -82,7 +91,7 @@ def _solve_ultimately_periodic_initial(rec: LoopRecurrence, bnd=100):
     n = 10
     start = 0
     ith = 1
-    closed_form = PiecewiseClosedForm()
+    closed_form = PiecewiseClosedForm(rec.ind_var)
     acc_index_seq = []
     while n < bnd:
         n *= 2
@@ -90,14 +99,15 @@ def _solve_ultimately_periodic_initial(rec: LoopRecurrence, bnd=100):
         acc_index_seq.extend(guessed_index_seq)
         smallest = verify(rec, candidate, guessed_index_seq)
         shift_candidate = candidate.subs({candidate.ind_var: candidate.ind_var - start})
-        closed_form = closed_form.concatenate(shift_candidate)
+        closed_form = closed_form.concatenate(shift_candidate, start)
         # if smallest is not sp.oo: # means hypothesis is wrong
         if smallest is not None:
             start = smallest
         else:
             break
         ith += 1
-    return closed_form, utils.compress_seq(utils.flatten_seq(acc_index_seq))
+    res = closed_form, utils.compress_seq(utils.flatten_seq(acc_index_seq))
+    return res
 
 def verify(rec: Recurrence, candidate_sol: PiecewiseClosedForm, pattern: list):
     conditions = rec.conditions
@@ -170,7 +180,7 @@ def _compute_solution_by_index_seq(rec: LoopRecurrence, index_seq):
             conditions.append(thresholds[i] <= rec.ind_var)
         else:
             conditions.append(z3.And(thresholds[i] <= rec.ind_var, rec.ind_var < thresholds[i + 1]))
-    return PiecewiseClosedForm(conditions, closed_forms, rec.ind_var)
+    return PiecewiseClosedForm(rec.ind_var, conditions, closed_forms)
 
 def _compute_candidate_solution(rec: Recurrence, start, n, ith):
     values, index_seq = rec.get_n_values_starts_with(start, n)
@@ -212,13 +222,15 @@ def _set_up_constraints(rec: LoopRecurrence, closed_form: PiecewiseClosedForm, i
     # rec_conditions = [utils.to_z3(cond) for cond in rec.conditions]
     rec_conditions = rec.conditions
     # intervals = closed_form.intervals
-    k = z3.Int('k')
+    # k = z3.Int('__k')
+    ks = [z3.Int('__k%d' % i) for i in range(len(index_seq))]
     constraint = True
     ind_var = closed_form.ind_var
-    for i, (seq, q) in enumerate(index_seq):
-        # premise = utils.interval_to_z3(intervals[i], closed_form.ind_var)
+    for i, (seq, _) in enumerate(index_seq):
+        k = ks[i]
         premise = closed_form.conditions[i]
         closed_form_component = closed_form.closed_forms[i]
+        print(closed_form_component.conditions)
         period = closed_form_component.period
         solver = z3.Solver()
         for r, j in enumerate(seq):
@@ -234,4 +246,4 @@ def _set_up_constraints(rec: LoopRecurrence, closed_form: PiecewiseClosedForm, i
             cur_constraint = z3.Implies(premise, condition)
             cur_constraint = z3.substitute(cur_constraint, (ind_var, period*k + r))
             constraint = z3.And(constraint, cur_constraint)
-    return constraint, k
+    return constraint, ks

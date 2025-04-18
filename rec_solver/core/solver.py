@@ -8,7 +8,8 @@ def solve_str(s):
     rec = parse_str(s)
     if isinstance(rec, LoopRecurrence):
         try:
-            return solve_ultimately_periodic_symbolic(rec)
+            res = solve_ultimately_periodic_symbolic(rec)
+            return res
         except:
             res = poly_expr_solving(rec, 2)
             if not res.is_trivial():
