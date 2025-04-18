@@ -33,6 +33,7 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
         model = z3_solver.model()
         parameters = rec.get_symbolic_values()
         cur_val = {p: model.eval(p, model_completion=True) for p in parameters}
+        # cur_val = {z3.Int('x'): z3.IntVal(4), z3.Int('_ret0'): z3.IntVal(0)}
         initialized_rec = rec.subs(cur_val)
         # initialized_rec.pprint()
         # print(initialized_rec.conditions)
@@ -42,16 +43,11 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
         index_seq_temp = [(s[0], q) for s, q in zip(index_seq, qs)] + [index_seq[-1]]
         can_sol = _compute_solution_by_index_seq(rec, index_seq_temp)
         quantified_constraint, ks = _set_up_constraints(rec, can_sol, index_seq_temp)
-        print(quantified_constraint)
         quantified_constraint = z3.simplify(z3.And(quantified_constraint, *[q >= 1 for q in qs]))
         # qe = z3.Then('qe', 'ctx-solver-simplify')
         qe = z3.Then('simplify', 'qe', 'simplify')
         # constraint = z3.And(*qe.apply(z3.ForAll(k, z3.Implies(k >= 0, quantified_constraint)))[0])
         full_constraint = z3.ForAll(ks, z3.Implies(z3.And([k >= 0 for k in ks]), quantified_constraint))
-        tmp_solver = z3.Solver()
-        # print(full_constraint)
-        print(tmp_solver.check(full_constraint))
-        print('*'*20)
         constraint = z3.simplify(qe.apply(full_constraint).as_expr())
         logger.debug('In the %dth iteration: the sampled initial values are %s' % (i, cur_val))
         logger.debug('In the %dth iteration: the index sequence is %s' % (i, index_seq))
@@ -68,6 +64,8 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
             constraints.append(constraint_no_kq)
             acc_condition = z3.And(acc_condition, z3.Not(constraint_no_kq))
             closed_forms.append(can_sol.simple_subs(q_sol))
+            closed_forms[-1].pprint()
+        # exit(0)
     res = SymbolicClosedForm(constraints, closed_forms, rec.ind_var)
     return res
     
@@ -222,28 +220,32 @@ def _set_up_constraints(rec: LoopRecurrence, closed_form: PiecewiseClosedForm, i
     # rec_conditions = [utils.to_z3(cond) for cond in rec.conditions]
     rec_conditions = rec.conditions
     # intervals = closed_form.intervals
-    # k = z3.Int('__k')
-    ks = [z3.Int('__k%d' % i) for i in range(len(index_seq))]
+    # k = z3.Int('__k0')
+    # ks = [z3.Int('__k%d' % i) for i in range(len(index_seq))]
+    ks = []
     constraint = True
     ind_var = closed_form.ind_var
-    for i, (seq, _) in enumerate(index_seq):
-        k = ks[i]
-        premise = closed_form.conditions[i]
+    closed_form.pprint()
+    acc = z3.IntVal(0)
+    k_cnt = 0
+    for i, (seq, q) in enumerate(index_seq):
+        piece_premise = closed_form.conditions[i]
         closed_form_component = closed_form.closed_forms[i]
-        print(closed_form_component.conditions)
-        period = closed_form_component.period
+        # period = closed_form_component.period
         solver = z3.Solver()
         for r, j in enumerate(seq):
-            # if rec.conditions[j] == sp.true:
+            k = z3.Int('__k%d' % k_cnt)
+            ks.append(k)
+            k_cnt += 1
             if solver.check(z3.Not(rec.conditions[j])) == z3.unsat:
                 continue
-            # closed_form_z3 = closed_form_component.to_z3()
-            # mentioned_vars = rec.conditions[j].atoms(AppliedUndef)
+            premise = z3.simplify(z3.And(piece_premise, (k - acc) % len(seq) == r))
             mentioned_vars = utils.get_applied_functions(rec.conditions[j])
             closed_form_z3 = closed_form_component.selected_to_z3(mentioned_vars)
             mapping = [(kk, v) for kk, v in closed_form_z3.items()]
             condition = z3.substitute(rec_conditions[j], *mapping)
             cur_constraint = z3.Implies(premise, condition)
-            cur_constraint = z3.substitute(cur_constraint, (ind_var, period*k + r))
+            cur_constraint = z3.substitute(cur_constraint, (ind_var, k))
             constraint = z3.And(constraint, cur_constraint)
+        acc += acc + q
     return constraint, ks

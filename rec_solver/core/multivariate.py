@@ -315,7 +315,6 @@ def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
     loop_closed_form = solve_ultimately_periodic_symbolic(loop_rec, precondition=precondition)
     piecewise_D = compute_piecewise_D(d, D, loop_guard, loop_closed_form, precondition)
     scalar_closed_form = loop_closed_form.subs({d: piecewise_D})
-    # scalar_closed_form.pprint()
     branches_rets = [[] for _ in range(len(rets))]
     for base_case in rec.get_base_cases():
         cond = base_case.condition
@@ -336,6 +335,10 @@ def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
     for branches in branches_rets:
         branches[-1] = (branches[-1][0], True)
     # print("D = %s" % piecewise_D)
+    # print(z3.simplify(z3.substitute(piecewise_D, (z3.Int('x'), z3.IntVal(4)))))
+    # print(z3.simplify(z3.substitute(piecewise_D, (z3.Int('x'), z3.IntVal(5)))))
+    # print(z3.simplify(z3.substitute(piecewise_D, (z3.Int('x'), z3.IntVal(6)))))
+    # print(z3.simplify(z3.substitute(piecewise_D, (z3.Int('x'), z3.IntVal(7)))))
     rets0 = [utils.to_ite(branches) for branches in branches_rets]
     closed_form_dict = scalar_closed_form.as_dict()
     # tmp_closed = loop_closed_form.as_dict()

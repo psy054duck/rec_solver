@@ -534,6 +534,7 @@ def _get_possible_eqs(constraints, x):
     #         possible_formulas.append(formula)
     # convert them into equations
     possible_formulas_sp = [to_sympy(formula) for formula in possible_formulas]
+    possible_formulas_sp = [f for f in possible_formulas_sp if f is not sp.true]
     possible_formulas_sp = [formula for formula in possible_formulas_sp if not isinstance(formula, sp.And)]\
                          + sum([list(formula.args) for formula in possible_formulas_sp if isinstance(formula, sp.And)], [])
     possible_eqs = [sp.Eq(f.lhs, f.rhs) for f in possible_formulas_sp]\
@@ -633,7 +634,7 @@ def get_all_atoms(constraint):
     def is_simple_expr(expr):
         if z3.is_const(expr) or (z3.is_app(expr) and expr.decl().kind() == z3.Z3_OP_UNINTERPRETED):
             return True
-        if z3.is_add(expr) or z3.is_sub(expr) or z3.is_mul(expr) or z3.is_div(expr):
+        if z3.is_add(expr) or z3.is_sub(expr) or z3.is_mul(expr) or z3.is_div(expr) or z3.is_idiv(expr):
             if all([is_simple_expr(arg) for arg in expr.children()]):
                 return True
         return False
@@ -938,6 +939,23 @@ def is_convex(constraints):
     solver.add([v_pp == t*v + (1 - t)*v_p for v, v_p, v_pp in zip(vars, vars_p, vars_pp)])
     solver.add(z3.Not(constraints_pp))
     return solver.check() == z3.unsat
+
+def sp_z3_simplify(expr, assumption):
+    '''Simplify z3 expression expr by first converting it to sympy and simplify it and then back to z3.
+       This is for simplifying expressions with integer divisions.'''
+    try:
+        expr_sp = to_sympy(expr)
+        expr_sp = sp.simplify(expr_sp)
+        expr_z3 = to_z3(expr_sp)
+        s = z3.Solver()
+        res = expr
+        s.add(assumption)
+        if s.check(expr != expr_z3) == z3.unsat:
+            res = expr_z3
+    except:
+        res = expr
+    return res
+
 
 if __name__ == '__main__':
     # x, y, z, q = z3.Ints('x y z q')

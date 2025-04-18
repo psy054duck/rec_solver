@@ -460,7 +460,10 @@ class LoopRecurrence:
         # left composition
         left_val = {v: z3.substitute(transition[v], list(cur_value.items())) for v in transition if z3.simplify(v) not in self.reverses}
         # right composition
-        right_val = {v: z3.substitute(cur_value[v], list(transition[v].items())) for v in cur_value if z3.simplify(v) in self.reverses}
+        zero_reverses_mapping = [(z3.simplify(func_app.decl()(self.ind_var)), func_app.decl()(z3.IntVal(0))) for func_app in self.reverses]
+        right_transition = {z3.simplify(func_app.decl()(0)): z3.substitute(trans, zero_reverses_mapping) for func_app, trans in transition.items() if z3.simplify(func_app) in self.reverses}
+        shifted_reverses = [z3.simplify(func_app.decl()(self.ind_var)) for func_app in self.reverses]
+        right_val = {z3.simplify(k.decl()(self.ind_var + 1)): z3.substitute(v, list(right_transition.items())) for k, v in cur_value.items() if z3.simplify(k) in shifted_reverses}
         val = {z3.simplify(z3.substitute(k, (self.ind_var, self.ind_var - 1))): v for k, v in (left_val | right_val).items()}
         return val
 
@@ -579,7 +582,8 @@ class LoopRecurrence:
 
             # right composition
             right_cur_transition = cur_transition
-            right_transition = {z3.simplify(func_app): z3.substitute(trans, *list(transition.items())) for func_app, trans in right_cur_transition.items() if z3.simplify(func_app) in rec.reverses}
+            transition_shift = {z3.simplify(func_app.decl()(ind_var)): trans for func_app, trans in transition.items()}
+            right_transition = {z3.simplify(func_app): z3.substitute(trans, *list(transition_shift.items())) for func_app, trans in right_cur_transition.items() if z3.simplify(func_app) in rec.reverses}
             transition = left_transition | right_transition
         new_rec = cls(initial, [(z3.BoolVal(True), transition)])
         new_rec.set_reverse = rec.reverses

@@ -39,9 +39,7 @@ class PeriodicClosedForm:
     def sympify(self):
         sympified = defaultdict(list)
         for i in range(self.period):
-            cond = True
-            if self.period != 1:
-                cond = sp.Eq(utils.to_sympy(self.ind_var) % self.period, i)
+            cond = utils.to_sympy(self.conditions[i])
             for f in self.closed_forms[i]:
                 sympified[utils.to_sympy(f)].append((utils.to_sympy(self.closed_forms[i][f]), cond))
         res = {f: sp.Piecewise(*sympified[f]) for f in sympified}
@@ -55,7 +53,7 @@ class PeriodicClosedForm:
             # if self.period != 1:
             #     cond = self.ind_var % self.period == i
             for f in self.closed_forms[i]:
-                tmp_res[f].append((self.closed_forms[i][f], cond))
+                tmp_res[f].append((utils.sp_z3_simplify(self.closed_forms[i][f], cond), cond))
         return {z3.simplify(f): utils.to_ite(tmp_res[f]) for f in tmp_res}
 
     def pprint(self):
