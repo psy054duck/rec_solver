@@ -124,7 +124,10 @@ def verify(rec: Recurrence, candidate_sol: PiecewiseClosedForm, pattern: list):
             continue
         # cond = cond.subs(last_closed_form.get_rth_part_closed_form(r), simultaneous=True)
         # cond = cond.subs({candidate_sol.ind_var: period*k + r}, simultaneous=True)
-        cond = z3.substitute(cond, *list(last_closed_form.get_rth_part_closed_form(r).items()))
+        mapping = [(k, v if z3.is_int(v) else z3.ToInt(v)) for k, v in last_closed_form.get_rth_part_closed_form(r).items()]
+        # print(list(last_closed_form.get_rth_part_closed_form(r).items()))
+        # cond = z3.substitute(cond, *list(last_closed_form.get_rth_part_closed_form(r).items()))
+        cond = z3.substitute(cond, mapping)
         cond = z3.substitute(cond, (candidate_sol.ind_var, period*k + r))
         # k_range = n_range.subs({n: period*k + r}, simultaneous=True).as_set()
         k_range = z3.substitute(n_range, (n, period*k + r))

@@ -96,6 +96,7 @@ def simpliy_solver(e):
 def to_sympy(s_z3, is_integer=True):
     # s = str(z3.simplify(s_z3, eq2ineq=True))
     s = str(z3.simplify(s_z3))
+    print(s)
     expr = sp.parse_expr(s, local_dict={'If': ite2piecewise}, evaluate=False, transformations=(standard_transformations + (convert_equals_signs,)))
     if expr is True or expr is False:
         return sp.sympify(expr)
@@ -252,9 +253,37 @@ def pow_to_mul(expr):
     repl = zip(pows, (sp.Mul(*[b]*e, evaluate=False) if b != -1 else sp.Piecewise((1, sp.Eq(e % 2, 0)), (-1, True)) for b,e in (i.as_base_exp() for i in pows)))
     return expr.subs(repl), list(repl)
 
+def num2z3(expr):
+    '''Convert a number in sympy to z3'''
+    assert(isinstance(expr, int) or expr.is_number)
+    if expr.is_integer or isinstance(expr, int):
+        return z3.IntVal(int(expr))
+    elif expr.is_Rational:
+        return z3.RatVal(int(expr.numerator), int(expr.denominator))
+    if isinstance(expr, sp.Add):
+        return sum([num2z3(arg) for arg in expr.args])
+    elif isinstance(expr, sp.Mul):
+        res = 1
+        for arg in reversed(expr.args):
+            if arg.is_rational:
+                res = (res*num2z3(arg.numerator))/num2z3(arg.denominator)
+            else:
+                res = res * num2z3(arg)
+        return z3.simplify(res)
+    elif isinstance(expr, sp.Pow):
+        if expr.base == 0: return z3.IntVal(0)
+        else: return to_z3(expr.base)**to_z3(expr.exp)
+    elif isinstance(expr, sp.sqrt):
+        return z3.Sqrt(to_z3(expr.args[0]))
+    raise Exception('Conversion for "%s" has not been implemented yet: %s' % (type(expr), expr))
+    
+
 def to_z3(sp_expr, sort='int'):
     self = sp.factor(sp_expr)
-    self, repl = pow_to_mul(self)
+    try:
+        self, repl = pow_to_mul(self)
+    except:
+        pass
     if sort == 'int':
         func_arg_sort = z3.IntSort()
     elif sort == 'real':
@@ -317,7 +346,7 @@ def to_z3(sp_expr, sort='int'):
         res = z3.If(to_z3(self.args[0]), to_z3(self.args[1]), to_z3(self.args[2]))
     elif isinstance(self, sp.Pow):
         if self.base == 0: res = z3.IntVal(0)
-        else: raise Exception('%s' % self)
+        else: res = to_z3(self.base)**to_z3(self.exp)
     elif isinstance(self, sp.Mod):
         res = to_z3(self.args[0], sort) % to_z3(self.args[1], sort)
     elif isinstance(self, sp.Abs):
@@ -752,90 +781,38 @@ def get_possible_eqs(constraint, x):
     eqs = [eq for eq in equalities if any(v in get_vars(eq) for v in x)]
     return eqs
 
-# def solve_piecewise(constraint, x):
-#     '''Solve x as a piecewise linear expression of other variables in constraint.
-#        The overall idea is that if \theta => x = f(y) under some case \phi free of x,
-#        it is equivalent to \theta ^ \phi => x = f(y).
-#        If \phi is a disjunction of \phi_1, \phi_2 ..., where \phi_i are conjunctions of atoms,
-#        then for each \phi_ij, we have \theta ^ \phi_i => x = f(y).
-#        Then \phi_i can be \theta{x/f(y)}.
+# def _subsumed_by(constraint, i, cases):
+#     '''Check if cases[i] is subsumed by some other case in cases under the constraint
+#        @constraint: a z3 formula
+#        @i: the index of the case to be checked
+#        @cases: a list of z3 formulas
+#        @return: if case is subsumed by some other case in cases, return the index of it, -1 otherwise'''
 # 
-#        @constraint: any quantifier free z3 formula, which entails that variables in x are linear combinations of other variables
-#        @x: a list of variables
-#        @return: a piecewise solution for x'''
-#     # get possible equations for x
-#     print('testing')
-#     _eqs = get_possible_eqs(constraint, x)
-#     # get all equations entailed by constraint
 #     solver = z3.Solver()
-#     cases = []
-#     eqs = []
-#     qe = z3.Then(z3.Tactic('qe'), z3.Tactic('ctx-solver-simplify'))
-#     for eq in product(_eqs, repeat=len(x)):
-#         e = z3.ForAll(x, z3.Implies(constraint, z3.And(*eq)))
-#         case = z3.Or(*[z3.And(*c) for c in qe(e)])
-#         sat_res = solver.check(case)
-#         if sat_res == z3.sat:
-#             cases.append(case)
-#             eqs.append(eq)
-#     # solve x for each case
-#     sol = []
-#     for eq in eqs:
-#         sol.append(solve_x(eq, x))
-#     # collapse the solution
-#     original_cases = cases.copy()
-#     new_cases = []
-#     new_sol = []
-#     for i, case in enumerate(cases):
-#         case_index = _subsumed_by(constraint, i, cases)
-#         print(case_index)
-#         if case_index == -1:
-#             new_cases.append(cases[i])
-#             new_sol.append(sol[i])
-#     cases = new_cases
-#     sol = new_sol
-#     new_cases = []
-#     new_sol = []
-#     while True:
-#         for i, case in enumerate(cases):
-#             for j, c in enumerate(cases):
-#                 if i == j: continue
-#                 if _subsumed_by_eq(constraint, i, j, cases, sol):
+#     solver.add(constraint)
+#     for j, c in enumerate(cases[i + 1: ]):
+#         res = solver.check(z3.And(cases[i], z3.Not(c)))
+#         if res == z3.unsat:
+#             return j
+#     return -1
 
-
-
-def _subsumed_by(constraint, i, cases):
-    '''Check if cases[i] is subsumed by some other case in cases under the constraint
-       @constraint: a z3 formula
-       @i: the index of the case to be checked
-       @cases: a list of z3 formulas
-       @return: if case is subsumed by some other case in cases, return the index of it, -1 otherwise'''
-
-    solver = z3.Solver()
-    solver.add(constraint)
-    for j, c in enumerate(cases[i + 1: ]):
-        res = solver.check(z3.And(cases[i], z3.Not(c)))
-        if res == z3.unsat:
-            return j
-    return -1
-
-def _subsumed_by_eq(constraint, i, j, cases, eqs):
-    '''Check if cases[i] is subsumed by cases[j] under the constraint by checking
-       if eqs[j] evaluated to the same value as eqs[i] under cases[i].
-       @constraint: a z3 formula
-       @i: the index of the first case
-       @j: the index of the second case
-       @cases: a list of z3 formulas
-       @eqs: a list of list of z3 formulas
-       @return: True if the ith and jth cases can be merged, False otherwise'''
-    solver = z3.Solver()
-    solver.add(constraint)
-    assert(len(eqs[i]) == len(eqs[j]))
-    evaluations = z3.And(*[eqs[i][x] == eqs[j][x] for x in eqs[j]])
-    res = solver.check(z3.And(cases[i], z3.Not(evaluations)))
-    if res == z3.unsat:
-        return True
-    return False
+# def _subsumed_by_eq(constraint, i, j, cases, eqs):
+#     '''Check if cases[i] is subsumed by cases[j] under the constraint by checking
+#        if eqs[j] evaluated to the same value as eqs[i] under cases[i].
+#        @constraint: a z3 formula
+#        @i: the index of the first case
+#        @j: the index of the second case
+#        @cases: a list of z3 formulas
+#        @eqs: a list of list of z3 formulas
+#        @return: True if the ith and jth cases can be merged, False otherwise'''
+#     solver = z3.Solver()
+#     solver.add(constraint)
+#     assert(len(eqs[i]) == len(eqs[j]))
+#     evaluations = z3.And(*[eqs[i][x] == eqs[j][x] for x in eqs[j]])
+#     res = solver.check(z3.And(cases[i], z3.Not(evaluations)))
+#     if res == z3.unsat:
+#         return True
+#     return False
 
         
 # def simplify_by_resolution(constraint):
@@ -970,28 +947,3 @@ if __name__ == '__main__':
     inequalties = get_all_atoms(e2)
     equalities = transform_to_equalities(inequalties)
     print(equalities)
-    # dnf = z3.Then(to_cnf, to_dnf)
-    # print(e1)
-    # print(dnf(e1))
-    # print(e2)
-    # print(dnf(e2))
-    # sim = z3.Then(z3.Tactic('simplify'), z3.Tactic('solve-eqs'), z3.Tactic('ctx-solver-simplify'))
-    # print(z3.simplify(z3.Or(*[z3.And(*conjunct) for conjunct in sim(e1)])))
-    # print(z3.simplify(z3.Or(*[z3.And(*conjunct) for conjunct in sim(e2)])))
-    # qe = z3.Tactic('qe')
-    # print(qe(z3.ForAll(k, z3.And(q >= 1, z3.Implies(z3.And(0 <= k, k < q), z3.And(k < z, k + z - c - 1 != 0))))))
-    # from z3 import And, Implies, Not, ForAll, Or
-    # # e = And(And(And(True, Implies(Not(q0 <= 1*k + 0), And(Not(z + -1*(1*k + 0) <= 0), Not(-1 == -1*(z + -1*(1*k + 0)) + c)))), Implies(q0 <= 1*k + 0, And(Not(z + -1*q0 <= 0), -1 == -1*(z + -1*q0) + c))), q0 >= 1)
-    # # e = And(And(True, Implies(Not(q0 <= 1*k + 0), And(Not(z + -1*(1*k + 0) <= 0), Not(-1 == -1*(z + -1*(1*k + 0)) + c)))), Implies(q0 <= 1*k + 0, And(Not(And(Not(z + -1*q0 <= 0), -1 == -1*(z + -1*q0) + c)), Not(And(Not(z + -1*q0 <= 0), Not(-1 == -1*(z + -1*q0) + c))))))
-    # # e = And(q0 >= 1, Not(z + -1*q0 <= 0), -1 == -1*z + q0 + c, Not(And(c + -1*z <= -1, Or(Not(q0 >= 1), And(q0 + c + -1*z <= -1, Not(And(Not(z + -1*q0 <= 0), -1 == -1*z + q0 + c))), -1*q0 + -1*c + z <= 0))), Not(And(q0 >= 1, Or(Not(q0 >= 1), z + -1*q0 <= -1, And(-1*c + z + -1*q0 <= 0, c + -1*z + q0 <= -1)))))
-    # e = And(Not(And(Not(z + -1*q0 <= 0), Not(-1 == -1*z + q0 + c))), q0 >= 1, Not(And(c + -1*z <= -1, Or(Not(q0 >= 1), -1*q0 + -1*c + z <= 0, And(q0 + c + -1*z <= -1, Not(z + -1*q0 <= 0), Not(-1 == -1*z + q0 + c))))), Not(And(q0 >= 1, Or(Not(q0 >= 1), z + -1*q0 <= -1, And(-1*c + z + -1*q0 <= 0, c + -1*z + q0 <= -1)))))
-    # q = solve_piecewise_sol(e, q0, z3.Int)
-    # print(q)
-    # sim = z3.With(z3.Tactic('simplify'), eq2ineq=True)
-    # print(sim(e))
-    # solver = z3.Solver()
-    # # res = solver.check(And(ForAll(k, Implies(k >= 0, e)), Not(q0 == z), q0 >= 1))
-    # # res = solver.check(And(ForAll(k, Implies(k >= 0, e)), Not(q0 == z - c - 1), q0 >= 1))
-    # res = solver.check(And(e, Not(q0 == z - c - 1), q0 >= 1))
-    # print(res)
-    # print(solver.model())

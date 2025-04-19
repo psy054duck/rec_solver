@@ -399,6 +399,7 @@ class LoopRecurrence:
         # self._conditions = [branch.subs(closed_forms) for branch in self._conditions]
         # self._transitions = [{k: v.subs(closed_forms) for k, v in trans.items()} for trans in self._transitions]
         mapping = list(closed_forms.items())
+        mapping = [(z3.simplify(k), z3.simplify(v) if z3.is_int(v) else z3.ToInt(v)) for k, v in mapping]
         self._conditions = [z3.substitute(branch, *mapping) for branch in self._conditions]
         self._transitions = [{k: z3.substitute(v, *mapping) for k, v in trans.items()} for trans in self._transitions]
         self._closed_forms |= closed_forms

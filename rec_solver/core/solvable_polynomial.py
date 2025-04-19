@@ -96,14 +96,18 @@ def gen_polynomial_template_for_degree(ind_var, degr, name=""):
     return template, list(coeffs)
 
 def z3_pow(expr, p):
-    assert(isinstance(p, int) or expr == 1 or expr == -1)
+    # assert(isinstance(p, int) or expr == 1 or expr == -1)
     # mod = z3.Function('Mod', z3.IntSort(), z3.IntSort(), z3.IntSort())
     if expr == 1: return expr
     if expr == -1 and not isinstance(p, int): return z3.If(p % 2 == 0, 1, -1)
     res = 1
-    for _ in range(p):
-        res *= expr
-    return res
+    if isinstance(p, int):
+        for _ in range(p):
+            res *= expr
+        return res
+    z3_pow = z3.Function('Pow', z3.RealSort(), z3.IntSort(), z3.IntSort())
+    base = utils.num2z3(expr)
+    return z3_pow(expr, p)
 
 def get_layers_for_solvable_map(rec: LoopRecurrence):
     # digraph, functions = build_adjacency_matrix(rec)
