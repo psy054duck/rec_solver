@@ -96,7 +96,6 @@ def simpliy_solver(e):
 def to_sympy(s_z3, is_integer=True):
     # s = str(z3.simplify(s_z3, eq2ineq=True))
     s = str(z3.simplify(s_z3))
-    print(s)
     expr = sp.parse_expr(s, local_dict={'If': ite2piecewise}, evaluate=False, transformations=(standard_transformations + (convert_equals_signs,)))
     if expr is True or expr is False:
         return sp.sympify(expr)
@@ -557,12 +556,14 @@ def _solve_linear_expr_heuristic(constraints, x):
 
 def _get_possible_eqs(constraints, x):
     possible_formulas = get_all_atoms(z3.And(constraints))
+    print(possible_formulas)
     # for formula in constraints:
     #     all_vars = get_vars(formula)
     #     if any(str(v) in [str(var) for var in all_vars] for v in x):
     #         possible_formulas.append(formula)
     # convert them into equations
     possible_formulas_sp = [to_sympy(formula) for formula in possible_formulas]
+    possible_formulas_sp = [f for f in possible_formulas_sp if f is not sp.false]
     possible_formulas_sp = [f for f in possible_formulas_sp if f is not sp.true]
     possible_formulas_sp = [formula for formula in possible_formulas_sp if not isinstance(formula, sp.And)]\
                          + sum([list(formula.args) for formula in possible_formulas_sp if isinstance(formula, sp.And)], [])

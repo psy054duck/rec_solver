@@ -181,7 +181,8 @@ class MultiRecurrence:
             branches = args[0]
             conditions = [branch[0] for branch in branches]
             self._conditions = Recurrence.make_exclusive_conditions(conditions)
-            transitions = [branch[1] for branch in branches]
+            transitions = [branch[1] for i, branch in enumerate(branches) if not z3.is_true(self._conditions[i])]
+            self._conditions = [cond for cond in self._conditions if not z3.is_true(cond)]
             self.func_sig = list(transitions[0].keys())[0]
             self._recursive_calls, self._post_ops = self._preprocess_transitions(transitions)
         elif len(args) == 3:
