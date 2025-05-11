@@ -338,7 +338,6 @@ class MultiRecurrence:
 class LoopRecurrence:
     def __init__(self, initial, branches):
         self._preprocess(initial, branches)
-        self.cached_result = {}
         self.reverses = set()
 
     def _preprocess(self, initial, branches):
@@ -420,17 +419,22 @@ class LoopRecurrence:
         branches = list(zip(self.conditions, self.transitions))
         return LoopRecurrence(new_initial, branches)
 
-    def get_n_values_starts_with(self, start, n):
-        first_values, index_seq = self.get_first_n_values(start + n)
-        return first_values[start:], index_seq[start:]
+    def get_n_values_starts_with(self, start, n, start_value=None):
+        return self.get_first_n_values(n, start, start_value)
+        # if start_value is None:
+        #     first_values, index_seq = self.get_first_n_values(start + n)
+        #     return first_values[start:], index_seq[start:]
+        # else:
+        #     first_values, index_seq = self.get_first_n_values(n, start_value)
+        #     return first_values, index_seq
 
-    def get_first_n_values(self, n):
+    def get_first_n_values(self, n, start=0, start_value=None):
         assert(self.is_standard())
-        first_n_values = [self.initial]
+        first_n_values = [self.initial] if start_value is None else [start_value]
         conditions = self.conditions
         transitions = self.transitions
         index_seq = []
-        for i in range(n):
+        for i in range(start, start + n):
             cur_values = first_n_values[-1]
             # cur_transitions = [{k.subs(self.ind_var, i): trans[k].subs(self.ind_var, i) for k in trans} for trans in transitions]
             # cur_conditions = [cond.subs(self.ind_var, i) for cond in conditions]

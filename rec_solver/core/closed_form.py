@@ -29,7 +29,7 @@ class PeriodicClosedForm:
         raw_val = self.as_dict()
         if isinstance(n, int):
             n = z3.IntVal(n)
-        val = {f: z3.simplify(z3.substitute(v, (self.ind_var, n))) for f, v in raw_val.items()}
+        val = {z3.simplify(z3.substitute(f, (self.ind_var, n))): z3.simplify(z3.substitute(v, (self.ind_var, n))) for f, v in raw_val.items()}
         return val
 
     @property

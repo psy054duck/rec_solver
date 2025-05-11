@@ -91,9 +91,10 @@ def _solve_ultimately_periodic_initial(rec: LoopRecurrence, bnd=100):
     ith = 1
     closed_form = PiecewiseClosedForm(rec.ind_var)
     acc_index_seq = []
+    start_value = rec.initial
     while n < bnd:
         n *= 2
-        candidate, guessed_index_seq = _compute_candidate_solution(rec, start, n, ith)
+        candidate, guessed_index_seq = _compute_candidate_solution(rec, start, n, ith, start_value=start_value)
         acc_index_seq.extend(guessed_index_seq)
         smallest = verify(rec, candidate, guessed_index_seq)
         shift_candidate = candidate.subs({candidate.ind_var: candidate.ind_var - start})
@@ -103,6 +104,8 @@ def _solve_ultimately_periodic_initial(rec: LoopRecurrence, bnd=100):
             start = smallest
         else:
             break
+        start_value = closed_form.eval_at(start).as_dict()
+        start_value = {z3.substitute(k, (rec.ind_var, z3.IntVal(start))): v for k, v in start_value.items()}
         ith += 1
     res = closed_form, utils.compress_seq(utils.flatten_seq(acc_index_seq))
     return res
@@ -183,8 +186,8 @@ def _compute_solution_by_index_seq(rec: LoopRecurrence, index_seq):
             conditions.append(z3.And(thresholds[i] <= rec.ind_var, rec.ind_var < thresholds[i + 1]))
     return PiecewiseClosedForm(rec.ind_var, conditions, closed_forms)
 
-def _compute_candidate_solution(rec: Recurrence, start, n, ith):
-    values, index_seq = rec.get_n_values_starts_with(start, n)
+def _compute_candidate_solution(rec: Recurrence, start, n, ith, start_value):
+    values, index_seq = rec.get_n_values_starts_with(start, n, start_value)
     compressed_seq = utils.compress_seq(index_seq)
     guessed_patterns = [seq for seq, _ in compressed_seq]
     debug_prefix = "%dth guess starts with %dth value: " % (ith, start)
