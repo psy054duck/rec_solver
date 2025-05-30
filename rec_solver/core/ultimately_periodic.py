@@ -55,6 +55,7 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
         logger.debug('In the %dth iteration: the closed-form solution is\n%s' % (i, can_sol))
         logger.debug('In the %dth iteration: the q\'s are %s' % (i, qs))
         q_linear = utils.solve_piecewise_sol(constraint, qs, sort=z3.Int)
+        # print(constraint)
         logger.debug('In the %dth iteration: the q\'s solutions are %s' % (i, q_linear.to_piecewise()))
         for q_constraint, q_sol in zip(q_linear.conditions, q_linear.expressions):
             constraint_no_q = z3.substitute(z3.And(constraint, q_constraint), *[(q, q_sol[q]) for q in qs])
@@ -64,7 +65,7 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
             constraints.append(constraint_no_kq)
             acc_condition = z3.And(acc_condition, z3.Not(constraint_no_kq))
             closed_forms.append(can_sol.simple_subs(q_sol))
-            closed_forms[-1].pprint()
+            # closed_forms[-1].pprint()
         # exit(0)
     res = SymbolicClosedForm(constraints, closed_forms, rec.ind_var)
     return res
@@ -120,6 +121,7 @@ def verify(rec: Recurrence, candidate_sol: PiecewiseClosedForm, pattern: list):
     n = z3.Int('__n')
     k = z3.Int('__k')
     n_range = n >= start
+    candidate_sol.pprint()
     smallest = None
     for r, i in enumerate(periodic_index_seq):
         cond = conditions[i]
