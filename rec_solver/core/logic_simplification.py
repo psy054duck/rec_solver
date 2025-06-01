@@ -104,6 +104,35 @@ def to_dnf(fml):
         dnf.append([z3.Not(lit) for lit in literals])
     return dnf
 
+def atom2canonical(atom):
+    '''Convert atom to a canonical form.'''
+    if z3.is_lt(atom):
+        return atom.arg(1) - atom.arg(0) - 1 >= 0
+    elif z3.is_le(atom):
+        return atom.arg(1) - atom.arg(0) >= 0
+    elif z3.is_gt(atom):
+        return atom.arg(0) - atom.arg(1) - 1 >= 0
+    elif z3.is_ge(atom):
+        return atom.arg(0) - atom.arg(1) >= 0
+    elif z3.is_eq(atom):
+        return atom.arg(0) - atom.arg(1) == 0
+
+def literal2canonical(literal):
+    '''Convert literal to a canonical form.'''
+    if not z3.is_not(literal):
+        return [atom2canonical(literal)]
+    atom = literal.arg(0)
+    if z3.is_lt(atom):
+        return [atom2canonical(atom.arg(0) >= atom.arg(1))]
+    elif z3.is_le(atom):
+        return [atom2canonical(atom.arg(0) > atom.arg(1))]
+    elif z3.is_gt(atom):
+        return [atom2canonical(atom.arg(0) <= atom.arg(1))]
+    elif z3.is_ge(atom):
+        return [atom2canonical(atom.arg(0) < atom.arg(1))]
+    elif z3.is_eq(atom):
+        return [atom2canonical(atom.arg(0) > atom.arg(1)), atom2canonical(atom.arg(0) < atom.arg(1))]
+
 class DNFConverter:
     def __init__(self):
         pass

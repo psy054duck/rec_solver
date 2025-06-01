@@ -410,7 +410,7 @@ def compute_piecewise_D(d, D, loop_cond, loop_closed_form, precondition):
     hints = []
     for i, (cur_case, closed) in enumerate(zip(loop_closed_form._constraints, loop_closed_form._closed_forms)):
         logger.debug('Handling case %d/%d' % (i + 1, len(loop_closed_form._constraints)))
-        terminate_cond = z3.substitute(loop_cond, *list(closed.as_dict().items()))
+        terminate_cond = z3.simplify(z3.substitute(loop_cond, *list(closed.as_dict().items())), elim_ite=True)
         cur_D = compute_D_by_case(d_z3, D_z3, z3.Not(terminate_cond), cur_case, hints)
         if cur_D is not None:
             hints.append(cur_D)
@@ -429,8 +429,9 @@ def compute_D_by_case(d, D, loop_cond, case, hints):
     axioms.add(z3.substitute(z3.Not(cond), (d, D)))
     axioms.add(D >= 0)
 
-    qe = z3.Tactic('qe')
-    constraints = z3.simplify(z3.Or(*[z3.And(*c) for c in qe(z3.And(*axioms))]))
+    qe = z3.Then(z3.Tactic('qe'), z3.Tactic('ctx-solver-simplify'), z3.Tactic('simplify'))
+    # constraints = z3.simplify(z3.Or(*[z3.And(*c) for c in qe(z3.And(*axioms))]))
+    constraints = qe(z3.And(*axioms)).as_expr()
     sol = utils.solve_piecewise_sol(constraints, [D], z3.Int)
     try:
         return sol.to_z3()[D]
