@@ -345,7 +345,7 @@ def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
     # tmp_ret = z3.Function('_ret0', z3.IntSort(), z3.IntSort())
     # ret0 = z3.Int('_ret0')
     # print(z3.simplify(z3.substitute(piecewise_D, [(z3.Int('sarg'), z3.IntVal(1)), (z3.Int('sarg1'), z3.IntVal(-1))])))
-    mapping = {ret: ret0 for ret, ret0 in zip(rets, rets0)}
+    mapping = {ret: ret0 for ret, ret0 in zip(rets, rets0)} | {d: piecewise_D}
     return [z3.substitute(closed_form_dict[symbol2func(ret)(d)], *list(mapping.items())) for ret in rets]
 
 def nearly_tail2loop(rec: MultiRecurrence, d, rets):
