@@ -233,9 +233,10 @@ def _set_up_constraints(rec: LoopRecurrence, closed_form: PiecewiseClosedForm, i
     ks = []
     constraint = True
     ind_var = closed_form.ind_var
-    closed_form.pprint()
+    # closed_form.pprint()
     acc = z3.IntVal(0)
     k_cnt = 0
+
     for i, (seq, q) in enumerate(index_seq):
         piece_premise = closed_form.conditions[i]
         closed_form_component = closed_form.closed_forms[i]
@@ -255,5 +256,6 @@ def _set_up_constraints(rec: LoopRecurrence, closed_form: PiecewiseClosedForm, i
             cur_constraint = z3.Implies(premise, condition)
             cur_constraint = z3.substitute(cur_constraint, (ind_var, k))
             constraint = z3.And(constraint, cur_constraint)
-        acc += acc + q
+        # acc += acc + q
+        acc += q
     return constraint, ks
