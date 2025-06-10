@@ -1,7 +1,9 @@
+import z3
 import sympy as sp
 from itertools import product
-from .recurrence import Recurrence
+from .recurrence import Recurrence, LoopRecurrence
 from .closed_form import ExprClosedForm
+from . import utils
 
 def gen_poly_template(X, d):
     monomials = {sp.Integer(1)}
@@ -89,13 +91,37 @@ def solve_rec(k, p, transitions, inits, ind_var):
             c = cs[0]
             return (p, sp.simplify(p.subs({ind_var: sp.Integer(0)}, simultaneous=True).subs(inits, simultaneous=True)) + ind_var*c)
 
-def poly_expr_solving(rec: Recurrence, degr=2):
+def _gen_tmp_var(func):
+    '''This is used to replace recursive functions with a temporary variable used in this module'''
+    return z3.Int(get_tmp_name(func))
+
+def get_tmp_name(func):
+    '''This is used to get the name of the temporary variable used in this module'''
+    return func.decl().name() + '_tmp'
+
+def _internalize_transition(transition, rec: LoopRecurrence):
+    '''This is used to internalize the transition of a recurrence relation'''
+    all_funcs = rec.all_funcs
+    internalize_update = lambda up: z3.substitute(up, [(f, _gen_tmp_var(f)) for f in all_funcs])
+    z3_res = {_gen_tmp_var(func): internalize_update(update) for func, update in transition.items()}
+    sp_res = {utils.to_sympy(func): utils.to_sympy(update) for func, update in z3_res.items()}
+    return sp_res
+
+def poly_expr_solving(rec: LoopRecurrence, degr=2):
     # X = [func.subs({rec.ind_var: rec.ind_var - 1}) for func in rec.all_funcs]
-    transitions = rec.transitions
-    ks_instances = vec_space_d(rec.all_funcs, transitions, rec.ind_var, degr)
+    mapping = {func: _gen_tmp_var(func) for func in rec.all_funcs}
+    all_vars = {utils.to_sympy(var) for var in set(mapping.values())}
+    transitions = [_internalize_transition(tran, rec) for tran in rec.transitions]
+    ind_var = utils.to_sympy(rec.ind_var)
+
+    ks_instances = vec_space_d(all_vars, transitions, ind_var, degr)
     closed_forms = {}
+    initial = _internalize_transition(rec.initial, rec)
     for k, instances in ks_instances:
         for p in instances:
-            expr, closed = solve_rec(k, p, transitions, rec.initial, rec.ind_var)
-            closed_forms[expr] = closed
-    return ExprClosedForm(closed_forms, rec.ind_var)
+            expr, closed = solve_rec(k, p, transitions, initial, ind_var)
+            if isinstance(expr, sp.core.numbers.One): continue
+            closed_forms[utils.to_z3(sp.expand(expr))] = utils.to_z3(sp.expand(closed))
+    reversed_mapping = {v: k for k, v in mapping.items()}
+    ori_closed_forms = {z3.substitute(f, list(reversed_mapping.items())): z3.substitute(closed, list(reversed_mapping.items())) for f, closed in closed_forms.items()}
+    return ExprClosedForm(ori_closed_forms, rec.ind_var)

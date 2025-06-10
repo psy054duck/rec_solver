@@ -1,0 +1,12 @@
+ari__028((0)) = 0;
+ari__026((0)) = 0;
+ari__0((0)) = ((2) * (ari_i29)) + (((- 1)) * (ari_i));
+if (And((And((true), (!((0) <= (ari__0((ari_loop_n))))))), (And((true), (true), (true))))) {
+	ari__0(((ari_loop_n) + (1))) = (ari__0((ari_loop_n))) + ((2) * (ari_i29));
+	ari__026(((ari_loop_n) + (1))) = ari__026((ari_loop_n));
+	ari__028(((ari_loop_n) + (1))) = (1) + (ari__028((ari_loop_n)));
+} else if (And((And((true), (!(!((0) <= (ari__0((ari_loop_n)))))))), (And((true), (true), (true))))) {
+	ari__0(((ari_loop_n) + (1))) = (ari__0((ari_loop_n))) + ((2) * (ari_i29));
+	ari__026(((ari_loop_n) + (1))) = (1) + (ari__026((ari_loop_n)));
+	ari__028(((ari_loop_n) + (1))) = (1) + (ari__028((ari_loop_n)));
+} 
