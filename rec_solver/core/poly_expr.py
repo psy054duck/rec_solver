@@ -110,18 +110,39 @@ def _internalize_transition(transition, rec: LoopRecurrence):
 def poly_expr_solving(rec: LoopRecurrence, degr=2):
     # X = [func.subs({rec.ind_var: rec.ind_var - 1}) for func in rec.all_funcs]
     mapping = {func: _gen_tmp_var(func) for func in rec.all_funcs}
-    all_vars = {utils.to_sympy(var) for var in set(mapping.values())}
+    all_vars = [utils.to_sympy(var) for var in list(mapping.values())]
     transitions = [_internalize_transition(tran, rec) for tran in rec.transitions]
+    initial = _internalize_transition(rec.initial, rec)
     ind_var = utils.to_sympy(rec.ind_var)
+    simple_solutions = {}
+    for var in all_vars:
+        all_rhs = [sp.simplify(tran[var]) for tran in transitions]
+        if _is_simple_rec(var, all_rhs):
+            const = sp.simplify(all_rhs[0] - var)
+            simple_solutions[utils.to_z3(var)] = utils.to_z3(initial[var] + const*ind_var)
 
     ks_instances = vec_space_d(all_vars, transitions, ind_var, degr)
     closed_forms = {}
-    initial = _internalize_transition(rec.initial, rec)
     for k, instances in ks_instances:
         for p in instances:
             expr, closed = solve_rec(k, p, transitions, initial, ind_var)
             if isinstance(expr, sp.core.numbers.One): continue
             closed_forms[utils.to_z3(sp.expand(expr))] = utils.to_z3(sp.expand(closed))
+    closed_forms = closed_forms | simple_solutions
+
     reversed_mapping = {v: k for k, v in mapping.items()}
     ori_closed_forms = {z3.substitute(f, list(reversed_mapping.items())): z3.substitute(closed, list(reversed_mapping.items())) for f, closed in closed_forms.items()}
     return ExprClosedForm(ori_closed_forms, rec.ind_var)
+
+def _is_simple_rec(lhs, all_rhs):
+    '''Check if the recurrence is simple, i.e., it has a single variable and a single transition'''
+    remainders = []
+    for rhs in all_rhs:
+        remainder = sp.simplify(rhs - lhs)
+        remainders.append(remainder)
+    if not all([sp.simplify(r - remainders[0]) == 0 for r in remainders]):
+        return False
+    
+    if remainders[0].is_number:
+        return True
+    return False
