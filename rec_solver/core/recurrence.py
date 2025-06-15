@@ -656,8 +656,12 @@ class LoopRecurrence:
     def _get_app_from_transitions(self):
         app = set()
         for trans in self.transitions:
+            app_from_key = set()
+            for k in trans:
+                last_arg = k.children()[-1]
+                app_from_key.add(z3.simplify(z3.substitute(k, (last_arg, last_arg - 1))))
             trans_app = reduce(set.union, [utils.get_app(expr) for expr in trans.values()], set())
-            app = app | trans_app 
+            app = app | trans_app | app_from_key
         return app
 
     def _get_initial_func(self):
