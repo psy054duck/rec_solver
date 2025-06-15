@@ -121,7 +121,7 @@ def verify(rec: Recurrence, candidate_sol: PiecewiseClosedForm, pattern: list):
     n = z3.Int('__n')
     k = z3.Int('__k')
     n_range = n >= start
-    candidate_sol.pprint()
+    # candidate_sol.pprint()
     smallest = None
     for r, i in enumerate(periodic_index_seq):
         cond = conditions[i]
