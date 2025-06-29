@@ -6,7 +6,7 @@ from sympy.core.function import UndefinedFunction
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, convert_equals_signs
 import z3
 from itertools import product
-from .logic_simplification import DNFConverter, equals, to_dnf, literal2canonical, merge_cases
+from .logic_simplification import DNFConverter, equals, to_dnf, literal2canonical, merge_cases, my_simplify
 
 z3.set_option(max_depth=99999999)
 # z3.set_option(timeout=5)
@@ -479,7 +479,8 @@ def is_same_transition(trans1, trans2):
 def flatten_seq(seq):
     return sum([l*c for l, c in seq], [])
 
-def solve_piecewise_sol(constraint, x, sort=z3.Real):
+def solve_piecewise_sol(constraint, x, sort=z3.Real, precondition= z3.BoolVal(True)):
+    x = list(x)
     elim_ite = z3.Tactic('elim-term-ite')
     constraint = elim_ite(constraint).as_expr()
     all_vars = get_vars(constraint)
@@ -497,12 +498,14 @@ def solve_piecewise_sol(constraint, x, sort=z3.Real):
         if linear_expr is not None:
             projected_expr = {v: linear_expr[v] for v in x}
             linear_exprs.append(projected_expr)
-            premises.append(z3.simplify(z3.substitute(formula, list(linear_expr.items()))))
+            premises.append(my_simplify(z3.substitute(formula, list(linear_expr.items())), assumption=precondition))
         else:
             return None
-    simplified_premises, simplified_linear_exprs = merge_cases(premises, linear_exprs)
-    return ConditionalExpr(simplified_premises, simplified_linear_exprs)
-    # return ConditionalExpr(premises, linear_exprs)
+    if len(x) == 1:
+        flat_expression = [expr[x[0]] for expr in linear_exprs]
+        simplified_premises, simplified_linear_exprs = merge_cases(premises, flat_expression, precondition=precondition)
+        return ConditionalExpr(simplified_premises, [{x[0]: expr} for expr in simplified_linear_exprs])
+    return ConditionalExpr(premises, linear_exprs)
 
 def to_eq(atom):
     lhs, rhs = atom.children()

@@ -328,7 +328,7 @@ def my_simplify(expr: z3.ExprRef, assumption: Optional[z3.ExprRef] = None) -> z3
             remains.append(simplify(simplified_clause))
         solver.pop()
     
-    return simplify(z3.And(remains)) if remains else expr.ctx().BoolVal(True)
+    return simplify(z3.And(remains))
 
 def merge_cases(conditions, expressions):
     """
@@ -397,10 +397,233 @@ def merge_cases(conditions, expressions):
     
     return res_conditions, res_expressions
 
-x = Int('x')
-conditions = [x > 0, x < 10, x == 5, x == -1]
-expressions = [x + 1, x + 2, 6, 0]
+import z3
+from typing import List, Tuple, Set
+from itertools import product
 
-merged_conditions, merged_expressions = merge_cases(conditions, expressions)
-print("Merged Conditions:", merged_conditions)
-print("Merged Expressions:", merged_expressions)
+def cartesian_product(num_cases: List[int]) -> List[List[int]]:
+    """Generate cartesian product of indices for each case."""
+    ranges = [range(n) for n in num_cases]
+    return [list(indices) for indices in product(*ranges)]
+
+def aux_expr2piecewise(expr: z3.ExprRef, cur_cond: z3.BoolRef, 
+                      conditions: List[z3.BoolRef], expressions: List[z3.ExprRef]) -> None:
+    """
+    Auxiliary function to convert expression to piecewise form.
+    
+    Args:
+        expr: The Z3 expression to convert
+        cur_cond: Current condition context
+        conditions: List to collect conditions (modified in-place)
+        expressions: List to collect expressions (modified in-place)
+    """
+    # Base case: if the expression is a constant or a variable, we can directly add it
+    if expr.decl().kind() == z3.Z3_OP_UNINTERPRETED and expr.num_args() == 0:
+        # This is a constant or variable
+        conditions.append(cur_cond)
+        expressions.append(expr)
+    elif expr.decl().kind() == z3.Z3_OP_ITE:
+        # If the expression is an if-then-else, we can extract the conditions and expressions
+        cond = expr.arg(0)
+        then_expr = expr.arg(1)
+        else_expr = expr.arg(2)
+        
+        aux_expr2piecewise(then_expr, z3.And(cond, cur_cond), conditions, expressions)
+        aux_expr2piecewise(else_expr, z3.And(z3.Not(cond), cur_cond), conditions, expressions)
+    
+    elif expr.num_args() > 0:  # expr.is_app() equivalent
+        arity = expr.num_args()
+        all_conditions = []
+        all_expressions = []
+        num_cases = []
+        
+        for i in range(expr.num_args()):
+            arg = expr.arg(i)
+            cur_conditions, cur_expressions = expr2piecewise(arg)
+            all_conditions.append(cur_conditions)
+            all_expressions.append(cur_expressions)
+            num_cases.append(len(cur_conditions))
+        
+        for indices in cartesian_product(num_cases):
+            acc_condition = z3.BoolVal(True)
+            acc_expressions = []
+            
+            for i in range(len(indices)):
+                cur_condition = all_conditions[i][indices[i]]
+                acc_condition = z3.And(acc_condition, cur_condition)
+                acc_expressions.append(all_expressions[i][indices[i]])
+            
+            conditions.append(z3.And(acc_condition, cur_cond))
+            
+            # Reconstruct the expression with the new arguments
+            if len(acc_expressions) == 1:
+                new_expr = expr.decl()(acc_expressions[0])
+            elif len(acc_expressions) == 2:
+                new_expr = expr.decl()(acc_expressions[0], acc_expressions[1])
+            else:
+                # For more than 2 arguments, we need to handle differently
+                new_expr = expr.decl()(*acc_expressions)
+            
+            expressions.append(new_expr)
+    else:
+        # Leaf node (constant or numeral)
+        conditions.append(cur_cond)
+        expressions.append(expr)
+
+def expr2piecewise(expr: z3.ExprRef) -> Tuple[List[z3.BoolRef], List[z3.ExprRef]]:
+    """
+    Convert a Z3 expression to piecewise form.
+    
+    Args:
+        expr: The Z3 expression to convert
+    
+    Returns:
+        Tuple of (conditions, expressions) representing the piecewise function
+    """
+    conditions = []
+    expressions = []
+    
+    aux_expr2piecewise(expr, z3.BoolVal(True), conditions, expressions)
+    
+    # Eliminate ITE from conditions
+    eliminated_conditions = []
+    for cond in conditions:
+        eliminated_conditions.append(eliminate_ite(cond))
+    
+    return merge_cases(eliminated_conditions, expressions)
+
+def eliminate_ite(expr: z3.ExprRef) -> z3.ExprRef:
+    """
+    Eliminate if-then-else terms from a Z3 expression using tactics.
+    
+    Args:
+        expr: The Z3 expression to process
+    
+    Returns:
+        Expression with ITE terms eliminated
+    """
+    # Create goal and add the expression
+    goal = z3.Goal()
+    goal.add(expr)
+    
+    # Apply the eliminate-term-ite tactic
+    elim_ite_tactic = z3.Tactic("elim-term-ite")
+    elim_res = elim_ite_tactic(goal)
+    
+    # Collect results into a list for OR operation
+    to_or = []
+    for i in range(len(elim_res)):
+        to_or.append(elim_res[i].as_expr())
+    
+    # Create OR of all results
+    if len(to_or) == 0:
+        eliminated_expr = z3.BoolVal(False)
+    elif len(to_or) == 1:
+        eliminated_expr = to_or[0]
+    else:
+        eliminated_expr = z3.Or(to_or)
+    
+    # Apply quantifier elimination tactic
+    elim_temp_tactic = z3.Tactic("qe")
+    aux_vars = collect_aux_vars(eliminated_expr)
+    
+    if len(aux_vars) > 0:
+        # If there are auxiliary variables, we need to eliminate them
+        exists_expr = z3.Exists(aux_vars, eliminated_expr)
+        qe_goal = z3.Goal()
+        qe_goal.add(exists_expr)
+        qe_res = elim_temp_tactic(qe_goal)
+        
+        qe_conditions = []
+        for j in range(qe_res.size()):
+            qe_conditions.append(qe_res[j].as_expr())
+        
+        if len(qe_conditions) == 0:
+            eliminated_expr = z3.BoolVal(False)
+        elif len(qe_conditions) == 1:
+            eliminated_expr = qe_conditions[0]
+        else:
+            eliminated_expr = z3.Or(qe_conditions)
+        
+        eliminated_expr = eliminated_expr.simplify()
+        
+        # Verify equivalence (assertion)
+        assert is_equivalent(eliminated_expr, expr), "Elimination changed semantics"
+    
+    return simplify(eliminated_expr)
+
+def is_equivalent(expr1: z3.ExprRef, expr2: z3.ExprRef) -> bool:
+    """
+    Check if two Z3 expressions are logically equivalent.
+    
+    Args:
+        expr1: First Z3 expression
+        expr2: Second Z3 expression
+    
+    Returns:
+        True if the expressions are equivalent, False otherwise
+    """
+    return implies(expr1, expr2) and implies(expr2, expr1)
+
+def collect_aux_vars(expr: z3.ExprRef) -> Set[z3.ExprRef]:
+    """
+    Collect auxiliary variables from a Z3 expression.
+    
+    Args:
+        expr: The Z3 expression to analyze
+    
+    Returns:
+        Set of auxiliary variables in the expression
+    """
+    aux_vars = {var for var in get_vars(expr) if '!' in str(var)}
+    return aux_vars
+
+def piecewise2ite(conditions: List[z3.BoolRef], expressions: List[z3.ExprRef]) -> z3.ExprRef:
+    """
+    Convert piecewise conditions and expressions to a nested if-then-else expression.
+    
+    Args:
+        conditions: List of Z3 boolean conditions
+        expressions: List of Z3 expressions corresponding to each condition
+    
+    Returns:
+        A Z3 if-then-else expression representing the piecewise function
+    
+    Raises:
+        ValueError: If conditions and expressions have different sizes
+    """
+    if len(conditions) != len(expressions):
+        raise ValueError("Conditions and expressions must have the same size.")
+    
+    if len(conditions) == 1:
+        return expressions[0]
+    
+    # Merge cases to simplify the piecewise function
+    new_conditions, new_expressions = merge_cases(conditions, expressions)
+    
+    # Build the if-then-else expression from right to left
+    ite_expr = new_expressions[-1]  # Start with the last expression
+    
+    # Work backwards through the conditions
+    for i in range(len(new_conditions) - 2, -1, -1):
+        ite_expr = z3.If(new_conditions[i], new_expressions[i], ite_expr)
+    
+    return ite_expr
+
+x = Int('x')
+# conditions = [x > 0, x < 10, x == 5, x == -1]
+# expressions = [x + 1, x + 2, 6, 2]
+e = If(x > 0, x + 1, If(x < -10, x + 2, If(x > -5, x+1, 200)))
+conds, exprs = expr2piecewise(e)
+e2 = piecewise2ite(conds, exprs)
+solver = z3.Solver()
+solver.add(e2 != e)
+print(solver.check())
+print("Conditions:", conds)
+print("Expressions:", exprs)
+print(e2)
+
+# merged_conditions, merged_expressions = merge_cases(conditions, expressions)
+# print("Merged Conditions:", merged_conditions)
+# print("Merged Expressions:", merged_expressions)
+

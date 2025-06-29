@@ -9,7 +9,7 @@ from . import utils
 from .recurrence import Recurrence, LoopRecurrence
 from .closed_form import PeriodicClosedForm, PiecewiseClosedForm, SymbolicClosedForm
 from .solvable_polynomial import solve_solvable_map, is_solvable_map
-from .logic_simplification import DNFConverter
+from .logic_simplification import DNFConverter, my_simplify
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
         logger.debug('In the %dth iteration: the set up index sequence template is %s' % (i, index_seq_temp))
         logger.debug('In the %dth iteration: the closed-form solution is\n%s' % (i, can_sol))
         logger.debug('In the %dth iteration: the q\'s are %s' % (i, qs))
-        q_linear = utils.solve_piecewise_sol(constraint, qs, sort=z3.Int)
+        q_linear = utils.solve_piecewise_sol(constraint, qs, sort=z3.Int, precondition=precondition)
         # print(constraint)
         logger.debug('In the %dth iteration: the q\'s solutions are %s' % (i, q_linear.to_piecewise()))
         for q_constraint, q_sol in zip(q_linear.conditions, q_linear.expressions):
@@ -62,7 +62,7 @@ def solve_ultimately_periodic_symbolic(rec: LoopRecurrence, bnd=100, preconditio
             qe = z3.Tactic('qe')
             forall_constraint = z3.ForAll(ks, z3.Implies(z3.And([k >= 0 for k in ks]), constraint_no_q))
             constraint_no_kq = z3.simplify(z3.Or(*[z3.And(*conjunct) for conjunct in qe.apply(forall_constraint)]))
-            constraints.append(constraint_no_kq)
+            constraints.append(my_simplify(constraint_no_kq, assumption=precondition))
             acc_condition = z3.And(acc_condition, z3.Not(constraint_no_kq))
             closed_forms.append(can_sol.simple_subs(q_sol))
             # closed_forms[-1].pprint()
