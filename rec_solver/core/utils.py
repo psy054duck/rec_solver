@@ -206,7 +206,16 @@ def sorted_strong_ly_connected_components(matrix):
     return components
 
 def compress_seq(seq):
-    return _compress_seq(seq, [], None)
+    compressed = _compress_seq(seq, [], None)
+    # Check if the periodic part also cover the last but one component
+    if len(compressed) > 1:
+        last, _ = compressed[-1]
+        last_but_one, cnt = compressed[-2]
+        if cnt == 1 and len(last_but_one) <= len(last) and last_but_one == last[len(last) - len(last_but_one):]:
+            # left rotate the last component by len(last_but_one) elements
+            compressed = compressed[:-2]
+            compressed.append((last[len(last) - len(last_but_one):] + last[:len(last_but_one)], 1))
+    return compressed
 
 def _compress_seq(seq, cur_compressed, best_compressed):
     covered_seq = sum([pattern*cnt for pattern, cnt in cur_compressed], [])

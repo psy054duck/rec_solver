@@ -215,7 +215,8 @@ def _solve_as_nonconditional(rec: Recurrence, seq):
         # modulo part
         for i in range(period):
             # shift_closed = {v: c.subs({rec.ind_var: (rec.ind_var - i)/period}, simultaneous=True) for v, c in raw_closed_form.items()}
-            shift_closed = {v: z3.substitute(c, (rec.ind_var, (rec.ind_var - i)/period)) for v, c in raw_closed_form.items()}
+            mapping = [(period*rec.ind_var, rec.ind_var - i), (rec.ind_var*period, rec.ind_var - i), (rec.ind_var, (rec.ind_var - i)/period)]
+            shift_closed = {v: z3.substitute(c, mapping) for v, c in raw_closed_form.items()}
             for j in seq[:i]:
                 shift_closed = rec.run_one_iteration_for_ith_transition(shift_closed, j)
             closed_form.append(shift_closed)

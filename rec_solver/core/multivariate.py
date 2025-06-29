@@ -309,7 +309,7 @@ def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
     loop_rec = nearly_tail2loop(rec, d, rets)
     loop_rec.pprint()
     loop_guard = get_loop_cond(rec, d)
-    # precondition = z3.BoolVal(True)
+    precondition = z3.BoolVal(True)
     # tmp_n = z3.Int('ari_loop_n')
     if is_array:
         assert(rec.func_sig.arity() == 2)
@@ -367,8 +367,7 @@ def solve_nearly_tail(rec: MultiRecurrence, is_array=False):
     # ret0 = z3.Int('_ret0')
     # print(z3.simplify(z3.substitute(piecewise_D, [(z3.Int('sarg'), z3.IntVal(1)), (z3.Int('sarg1'), z3.IntVal(-1))])))
     mapping = {ret: ret0 for ret, ret0 in zip(rets, rets0)} | {d: piecewise_D}
-    loop_bnd_mapping = [(tmp_n, z3.IntVal(10000))]
-    return [z3.substitute(z3.substitute(closed_form_dict[symbol2func(ret)(d)], *list(mapping.items())), loop_bnd_mapping) for ret in rets]
+    return [z3.substitute(closed_form_dict[symbol2func(ret)(d)], *list(mapping.items())) for ret in rets]
 
 def nearly_tail2loop(rec: MultiRecurrence, d, rets):
     assert(rec.is_nearly_tail())
