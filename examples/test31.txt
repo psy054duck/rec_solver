@@ -1,7 +1,9 @@
-if (Or(((ari_loop_n) <= (0)), ((array_i0) < (0)))) {
-	i170_((array_i0), (ari_loop_n)) = i170((array_i0));
-} else if ((array_i0) == ((ari_loop_n) - (1))) {
-	i170_((array_i0), (ari_loop_n)) = (42) + (ari_i18_unknown_0);
-} else if (!(Or((Or((false), (Or(((ari_loop_n) <= (0)), ((array_i0) < (0)))))), ((array_i0) == ((ari_loop_n) - (1)))))) {
-	i170_((array_i0), (ari_loop_n)) = i170_((array_i0), ((ari_loop_n) - (1)));
+if (Or(((ari_loop_n) <= (0)), ((i0) < (0)))) {
+	ari_i230_((i0), (ari_loop_n)) = ari_i230((i0));
+} else if (And(((((ari_loop_n) - (1)) % (4)) == (0)), ((i0) == ((ari_loop_n) - (1))))) {
+	ari_i230_((i0), (ari_loop_n)) = 4;
+} else if (And((!((((ari_loop_n) - (1)) % (4)) == (0))), ((i0) == ((ari_loop_n) - (1))))) {
+	ari_i230_((i0), (ari_loop_n)) = 0;
+} else if (!(Or((Or((Or((false), (Or(((ari_loop_n) <= (0)), ((i0) < (0)))))), (And(((((ari_loop_n) - (1)) % (4)) == (0)), ((i0) == ((ari_loop_n) - (1))))))), (And((!((((ari_loop_n) - (1)) % (4)) == (0))), ((i0) == ((ari_loop_n) - (1)))))))) {
+	ari_i230_((i0), (ari_loop_n)) = ari_i230_((i0), ((ari_loop_n) - (1)));
 } 

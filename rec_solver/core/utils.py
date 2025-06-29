@@ -6,7 +6,7 @@ from sympy.core.function import UndefinedFunction
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, convert_equals_signs
 import z3
 from itertools import product
-from .logic_simplification import DNFConverter, equals, to_dnf, literal2canonical
+from .logic_simplification import DNFConverter, equals, to_dnf, literal2canonical, merge_cases
 
 z3.set_option(max_depth=99999999)
 # z3.set_option(timeout=5)
@@ -500,7 +500,9 @@ def solve_piecewise_sol(constraint, x, sort=z3.Real):
             premises.append(z3.simplify(z3.substitute(formula, list(linear_expr.items()))))
         else:
             return None
-    return ConditionalExpr(premises, linear_exprs)
+    simplified_premises, simplified_linear_exprs = merge_cases(premises, linear_exprs)
+    return ConditionalExpr(simplified_premises, simplified_linear_exprs)
+    # return ConditionalExpr(premises, linear_exprs)
 
 def to_eq(atom):
     lhs, rhs = atom.children()
